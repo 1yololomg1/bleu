@@ -194,6 +194,13 @@ class DecoderConfig:
     fuzzy_retrieval_similarity: float = 0.90
     soft_retrieval_similarity: float = 0.82
     retrieval_lm_margin: float = 1.0
+    verbose: int = 0
+    trace_top_k: int = 5
+
+
+def sentence_bleu(reference_tokens: Sequence[str], hypothesis_tokens: Sequence[str]) -> float:
+    """Compute sentence-level BLEU (0..100) with smoothing."""
+    return corpus_bleu([reference_tokens], [hypothesis_tokens], max_order=4, smooth=1.0)
 
 
 class HybridAkkadianTranslator:
@@ -276,6 +283,24 @@ class HybridAkkadianTranslator:
         self.unigram = Counter()
         self.bigram = Counter()
         self.vocab: set[str] = set()
+        self.route_counter = Counter()
+        self.unknown_token_counter = Counter()
+        self.retrieval_sim_sum = 0.0
+        self.retrieval_sim_count = 0
+
+    def _vprint(self, level: int, msg: str) -> None:
+        """Conditional logger controlled by config.verbose."""
+        if self.config.verbose >= level:
+            print(msg)
+
+    def _finalize_sentence(self, text: str) -> str:
+        """Normalize output sentence casing and punctuation."""
+        s = str(text).strip()
+        if not s:
+            return "<gap>."
+        if not s.endswith("."):
+            s += "."
+        return s[0].upper() + s[1:] if s else s
 
     def _token_root(self, token: str) -> str:
         """Light root heuristic for sparse token generalization."""
@@ -286,6 +311,7 @@ class HybridAkkadianTranslator:
 
     def _load_lexical_resources(self) -> None:
         """Load available lexicons and merge into lexical prior map."""
+        ebl_loaded = 0
         ebl_candidates = [
             Path("/kaggle/input/deep-past-initiative-machine-translation/eBL_Dictionary.csv"),
             Path("/kaggle/input/deep-past-challenge-translate-akk/eBL_Dictionary.csv"),
@@ -299,6 +325,7 @@ class HybridAkkadianTranslator:
                     meaning = _extract_meaning_from_definition(row.get("definition", ""))
                     if headword and meaning and headword not in self.lexicon_map:
                         self.lexicon_map[headword] = meaning.lower()
+                        ebl_loaded += 1
                 break
 
         cad_paths = [
@@ -306,6 +333,7 @@ class HybridAkkadianTranslator:
             Path("/kaggle/input/datasets/alvarochaveste/akkylexyfromdic/akkadian_lexiconfromdick1-74.csv"),
             Path("/kaggle/input/datasets/alvarochaveste/akkadian-lexicon-clean/akkadian_lexicon_clean.csv"),
         ]
+        cad_loaded = 0
         for p in cad_paths:
             if not p.exists():
                 continue
@@ -317,8 +345,10 @@ class HybridAkkadianTranslator:
                     gloss = _extract_meaning_from_definition(row.get(gloss_col, ""))
                     if headword and gloss and headword not in self.lexicon_map:
                         self.lexicon_map[headword] = gloss.lower()
+                        cad_loaded += 1
 
         ono_path = Path("/kaggle/input/datasets/deeppast/old-assyrian-grammars-and-other-resources/onomasticon.csv")
+        ono_loaded = 0
         if ono_path.exists():
             ono_df = pd.read_csv(ono_path)
             if "Name" in ono_df.columns:
@@ -327,11 +357,21 @@ class HybridAkkadianTranslator:
                     if canonical and canonical != "nan":
                         key = normalize_akk_token(canonical)
                         self.onomasticon[key] = canonical
+                        ono_loaded += 1
                         spellings = str(row.get("Spellings_semicolon_separated", ""))
                         for sp in spellings.split(";"):
                             spk = normalize_akk_token(sp)
                             if spk:
                                 self.onomasticon[spk] = canonical
+                                ono_loaded += 1
+        self._vprint(
+            1,
+            (
+                f"[FIT] lexical resources: "
+                f"ebl_added={ebl_loaded}, cad_added={cad_loaded}, "
+                f"lexicon_total={len(self.lexicon_map)}, onomasticon_keys={len(self.onomasticon)}"
+            ),
+        )
 
     def _build_translation_memory(self, translits: Sequence[str], translations: Sequence[str]) -> None:
         """Build exact normalized transliteration -> most frequent translation map."""
@@ -413,6 +453,14 @@ class HybridAkkadianTranslator:
         self._fit_retriever(translits)
         self._build_translation_tables(translits, translations)
         self._build_language_model(translations)
+        self._vprint(
+            1,
+            (
+                f"[FIT] memory={len(self.translation_memory)} | "
+                f"token_table={len(self.token_to_eng)} | root_table={len(self.root_to_eng)} | "
+                f"vocab={len(self.vocab)}"
+            ),
+        )
 
     def _bigram_log_prob(self, prev_word: str, word: str, alpha: float = 0.4) -> float:
         """Smoothed bigram log-probability for LM scoring."""
@@ -442,22 +490,28 @@ class HybridAkkadianTranslator:
         idx = int(np.argmax(sims))
         return self.train_translations[idx], float(sims[idx])
 
-    def _candidate_phrases(self, raw_token: str) -> List[Tuple[str, float]]:
-        """Generate token-level translation candidates with calibrated priors."""
+    def _candidate_phrases_with_meta(self, raw_token: str) -> Tuple[List[Tuple[str, float]], Dict[str, object]]:
+        """Generate token-level candidates and provenance metadata for debugging."""
         token = normalize_akk_token(raw_token)
         cands: Dict[str, float] = {}
+        sources: List[str] = []
 
         if token in self.hard_map:
             cands[self.hard_map[token].lower()] = max(cands.get(self.hard_map[token].lower(), 0.0), 0.99)
+            sources.append("hard_map")
         if token in self.logogram_map:
             cands[self.logogram_map[token].lower()] = max(cands.get(self.logogram_map[token].lower(), 0.0), 0.97)
+            sources.append("logogram")
         if token in self.lexicon_map:
             cands[self.lexicon_map[token].lower()] = max(cands.get(self.lexicon_map[token].lower(), 0.0), 0.94)
+            sources.append("lexicon")
         if token in self.onomasticon:
             cands[self.onomasticon[token].lower()] = max(cands.get(self.onomasticon[token].lower(), 0.0), 0.95)
+            sources.append("onomasticon")
 
         # Learned token-level evidence.
         if token in self.token_to_eng:
+            sources.append("token_table")
             total = sum(self.token_to_eng[token].values()) or 1.0
             for w, cnt in self.token_to_eng[token].most_common(self.config.max_candidates_per_token):
                 if len(w) <= 1 and w not in {"a", "i"}:
@@ -468,6 +522,7 @@ class HybridAkkadianTranslator:
         # Backoff to root-level evidence.
         root = self._token_root(token)
         if root in self.root_to_eng:
+            sources.append("root_table")
             total = sum(self.root_to_eng[root].values()) or 1.0
             for w, cnt in self.root_to_eng[root].most_common(max(3, self.config.max_candidates_per_token // 2)):
                 prob = 0.1 + 0.55 * (cnt / total)
@@ -476,6 +531,7 @@ class HybridAkkadianTranslator:
         # Numeric and suffix-aware fallbacks.
         if re.fullmatch(r"\d+(?:[./]\d+)?", token):
             cands[token] = max(cands.get(token, 0.0), 0.92)
+            sources.append("numeric")
         if token.endswith("-ma"):
             base = token[:-3]
             if base in self.lexicon_map:
@@ -483,24 +539,42 @@ class HybridAkkadianTranslator:
                     cands.get("and " + self.lexicon_map[base].lower(), 0.0), 0.90
                 )
             cands["and"] = max(cands.get("and", 0.0), 0.85)
+            sources.append("suffix_ma")
 
+        used_fallback = False
         if not cands:
+            used_fallback = True
+            self.unknown_token_counter[token] += 1
             # Prefer preserving probable names over unconditional <gap>.
             if re.search(r"[A-Z]", raw_token) or raw_token.count("-") >= 1:
                 preserved = re.sub(r"\s+", "-", raw_token.strip()).lower()
                 cands[preserved] = 0.25
             cands["<gap>"] = 0.2
+            sources.append("fallback")
 
-        # Keep highest-prob candidates.
-        items = sorted(cands.items(), key=lambda kv: kv[1], reverse=True)
-        return items[: self.config.max_candidates_per_token]
+        items = sorted(cands.items(), key=lambda kv: kv[1], reverse=True)[: self.config.max_candidates_per_token]
+        meta = {
+            "raw_token": raw_token,
+            "norm_token": token,
+            "root": root,
+            "sources": sorted(set(sources)),
+            "used_fallback": used_fallback,
+            "top_candidates": items[: self.config.trace_top_k],
+        }
+        return items, meta
 
-    def _decode_tokens(self, raw_tokens: Sequence[str]) -> str:
+    def _decode_tokens(self, raw_tokens: Sequence[str], return_trace: bool = False):
         """Monotonic beam decoder using lexical priors + LM fluency."""
         beams: List[Tuple[float, List[str]]] = [(0.0, [])]
+        trace: Dict[str, object] = {"token_debug": [], "beam_width": self.config.beam_width}
 
         for raw_tok in raw_tokens:
-            token_cands = self._candidate_phrases(raw_tok)
+            token_cands, token_meta = self._candidate_phrases_with_meta(raw_tok)
+            if return_trace:
+                trace["token_debug"].append(token_meta)
+            if self.config.verbose >= 3:
+                self._vprint(3, f"[TOKEN] {token_meta}")
+
             next_beams: List[Tuple[float, List[str]]] = []
             for score, seq in beams:
                 prev = seq[-1] if seq else "<s>"
@@ -523,13 +597,26 @@ class HybridAkkadianTranslator:
             beams = next_beams[: self.config.beam_width]
 
         if not beams:
-            return "<gap>."
+            out = "<gap>."
+            if return_trace:
+                trace["decoded_sequence"] = ["<gap>"]
+                return out, trace
+            return out
+
         best_seq = max(beams, key=lambda x: x[0])[1]
         best_seq = self._postprocess(best_seq)
         if not best_seq:
-            return "<gap>."
-        sent = " ".join(best_seq)
-        return sent[0].upper() + sent[1:] + "."
+            out = "<gap>."
+            if return_trace:
+                trace["decoded_sequence"] = ["<gap>"]
+                return out, trace
+            return out
+
+        trace["decoded_sequence"] = list(best_seq)
+        sent = self._finalize_sentence(" ".join(best_seq))
+        if return_trace:
+            return sent, trace
+        return sent
 
     def _postprocess(self, words: List[str]) -> List[str]:
         """Remove repetitive artifacts and malformed tokens."""
@@ -557,31 +644,46 @@ class HybridAkkadianTranslator:
             out = compact
         return out
 
-    def translate(self, transliteration: str) -> str:
-        """Translate one transliteration string with hybrid strategy."""
+    def translate_with_trace(self, transliteration: str) -> Tuple[str, Dict[str, object]]:
+        """Translate one transliteration string and return a full decision trace."""
         norm = normalize_akk_sentence(transliteration)
         raw_tokens = str(transliteration).split()
+        trace: Dict[str, object] = {
+            "input": transliteration,
+            "normalized_input": norm,
+            "token_count": len(raw_tokens),
+            "route": None,
+            "retrieval_similarity": None,
+            "retrieved_translation": None,
+            "decoded_trace": None,
+        }
         if not norm:
-            return "<gap>."
+            trace["route"] = "empty"
+            self.route_counter["empty"] += 1
+            return "<gap>.", trace
 
         # 1) Exact memory has highest precision and should dominate when available.
         if norm in self.translation_memory:
             hit = self.translation_memory[norm].strip()
             if hit:
-                if hit.endswith("."):
-                    return hit[0].upper() + hit[1:]
-                return hit[0].upper() + hit[1:] + "."
+                trace["route"] = "exact_memory"
+                self.route_counter["exact_memory"] += 1
+                return self._finalize_sentence(hit), trace
 
         # 2) Fuzzy retrieval handles minor orthographic variants.
         retrieved, sim = self._fuzzy_retrieve(norm)
+        trace["retrieval_similarity"] = float(sim)
+        trace["retrieved_translation"] = retrieved
+        self.retrieval_sim_sum += float(sim)
+        self.retrieval_sim_count += 1
         if retrieved and sim >= self.config.fuzzy_retrieval_similarity:
-            hit = retrieved.strip()
-            if hit.endswith("."):
-                return hit[0].upper() + hit[1:]
-            return hit[0].upper() + hit[1:] + "."
+            trace["route"] = "fuzzy_retrieval"
+            self.route_counter["fuzzy_retrieval"] += 1
+            return self._finalize_sentence(retrieved), trace
 
         # 3) Decoder fallback for novel strings.
-        decoded = self._decode_tokens(raw_tokens)
+        decoded, decoded_trace = self._decode_tokens(raw_tokens, return_trace=True)
+        trace["decoded_trace"] = decoded_trace
 
         # 4) Soft retrieval rerank: allow high-sim memory to win when LM supports it.
         if retrieved and sim >= self.config.soft_retrieval_similarity:
@@ -590,16 +692,59 @@ class HybridAkkadianTranslator:
             r_score = self._lm_sentence_score(retrieved_words)
             d_score = self._lm_sentence_score(decoded_words)
             if r_score >= d_score - self.config.retrieval_lm_margin:
-                hit = retrieved.strip()
-                if hit.endswith("."):
-                    return hit[0].upper() + hit[1:]
-                return hit[0].upper() + hit[1:] + "."
+                trace["route"] = "soft_retrieval_rerank"
+                trace["lm_scores"] = {"retrieved": r_score, "decoded": d_score}
+                self.route_counter["soft_retrieval_rerank"] += 1
+                return self._finalize_sentence(retrieved), trace
 
-        return decoded
+        trace["route"] = "decoder"
+        self.route_counter["decoder"] += 1
+        return decoded, trace
+
+    def translate(self, transliteration: str) -> str:
+        """Translate one transliteration string with hybrid strategy."""
+        output, trace = self.translate_with_trace(transliteration)
+        if self.config.verbose >= 2:
+            sim_val = trace.get("retrieval_similarity")
+            sim_s = f"{sim_val:.3f}" if isinstance(sim_val, float) else "n/a"
+            self._vprint(
+                2,
+                (
+                    f"[TRACE] route={trace.get('route')} "
+                    f"sim={sim_s} tokens={trace.get('token_count')} "
+                    f"output={output}"
+                ),
+            )
+        return output
 
     def translate_batch(self, transliterations: Iterable[str]) -> List[str]:
         """Translate many sentences; deterministic order-preserving output."""
-        return [self.translate(t) for t in transliterations]
+        outputs: List[str] = []
+        for i, t in enumerate(transliterations):
+            out, trace = self.translate_with_trace(t)
+            outputs.append(out)
+            if self.config.verbose >= 1:
+                sim_val = trace.get("retrieval_similarity")
+                sim_s = f"{sim_val:.3f}" if isinstance(sim_val, float) else "n/a"
+                self._vprint(1, f"[PRED {i:04d}] route={trace.get('route'):<20} sim={sim_s} -> {out}")
+        return outputs
+
+    def print_debug_summary(self, top_unknown: int = 15) -> None:
+        """Print aggregate inference diagnostics."""
+        total = sum(self.route_counter.values())
+        print("[DEBUG] Inference route distribution:")
+        if total == 0:
+            print("  (no sentences translated)")
+            return
+        for route, count in self.route_counter.most_common():
+            print(f"  - {route:<22} {count:5d} ({(100.0 * count / total):5.1f}%)")
+        if self.retrieval_sim_count:
+            avg_sim = self.retrieval_sim_sum / self.retrieval_sim_count
+            print(f"[DEBUG] Avg top-1 retrieval similarity: {avg_sim:.3f}")
+        if self.unknown_token_counter:
+            print(f"[DEBUG] Top unknown tokens (fallback path):")
+            for tok, c in self.unknown_token_counter.most_common(top_unknown):
+                print(f"  - {tok:<20} {c}")
 
 
 def infer_columns(train_df: pd.DataFrame, test_df: pd.DataFrame) -> Tuple[str, str, str]:
@@ -615,6 +760,8 @@ def run_self_eval(
     translit_col: str,
     trans_col: str,
     eval_fraction: float = 0.12,
+    verbose: int = 0,
+    verbose_samples: int = 8,
 ) -> float:
     """Run holdout BLEU evaluation for quick local tuning feedback."""
     if len(train_df) < 50:
@@ -629,13 +776,68 @@ def run_self_eval(
     fit_df = train_df.iloc[fit_idx].reset_index(drop=True)
     val_df = train_df.iloc[val_idx].reset_index(drop=True)
 
-    model = HybridAkkadianTranslator()
+    model = HybridAkkadianTranslator(config=DecoderConfig(verbose=max(0, verbose - 1)))
     model.fit(fit_df, translit_col=translit_col, trans_col=trans_col)
-    hyps = model.translate_batch(val_df[translit_col].fillna("").tolist())
+    val_src = val_df[translit_col].fillna("").tolist()
+    val_ref_clean = [_clean_english_training_text(x) for x in val_df[trans_col].fillna("")]
+    hyps: List[str] = []
+    traces: List[Dict[str, object]] = []
+    for src in val_src:
+        hyp, tr = model.translate_with_trace(src)
+        hyps.append(hyp)
+        traces.append(tr)
 
-    refs_tok = [tokenize_english(_clean_english_training_text(x)) for x in val_df[trans_col].fillna("")]
+    refs_tok = [tokenize_english(x) for x in val_ref_clean]
     hyps_tok = [tokenize_english(x) for x in hyps]
-    return corpus_bleu(refs_tok, hyps_tok)
+    bleu = corpus_bleu(refs_tok, hyps_tok)
+
+    if verbose >= 1:
+        route_counter = Counter(str(t.get("route", "unknown")) for t in traces)
+        avg_sim = np.mean([float(t.get("retrieval_similarity", 0.0) or 0.0) for t in traces]) if traces else 0.0
+        gap_rate = 0.0
+        total_words = 0
+        gap_words = 0
+        for hyp_tokens in hyps_tok:
+            total_words += len(hyp_tokens)
+            gap_words += sum(1 for w in hyp_tokens if w == "<gap>")
+        if total_words > 0:
+            gap_rate = 100.0 * gap_words / total_words
+
+        print("[SELF-EVAL][DEBUG] route distribution:")
+        for route, count in route_counter.most_common():
+            print(f"  - {route:<22} {count:5d}")
+        print(f"[SELF-EVAL][DEBUG] avg retrieval similarity: {avg_sim:.3f}")
+        print(f"[SELF-EVAL][DEBUG] gap token rate: {gap_rate:.2f}%")
+        if model.unknown_token_counter:
+            print("[SELF-EVAL][DEBUG] top unknown tokens:")
+            for tok, cnt in model.unknown_token_counter.most_common(15):
+                print(f"  - {tok:<20} {cnt}")
+
+    if verbose >= 2 and traces:
+        # Show lowest sentence-BLEU examples for fast error diagnosis.
+        example_rows = []
+        for i, (src, ref, hyp, tr) in enumerate(zip(val_src, val_ref_clean, hyps, traces)):
+            s_bleu = sentence_bleu(tokenize_english(ref), tokenize_english(hyp))
+            example_rows.append((s_bleu, i, src, ref, hyp, tr))
+        example_rows.sort(key=lambda x: x[0])
+        print(f"[SELF-EVAL][DEBUG] worst {min(verbose_samples, len(example_rows))} examples:")
+        for s_bleu, i, src, ref, hyp, tr in example_rows[:verbose_samples]:
+            sim = tr.get("retrieval_similarity")
+            sim_s = f"{float(sim):.3f}" if isinstance(sim, (int, float)) else "n/a"
+            print("-" * 80)
+            print(f"[#{i}] sentence_BLEU={s_bleu:.2f} route={tr.get('route')} sim={sim_s}")
+            print(f"SRC: {src}")
+            print(f"REF: {ref}")
+            print(f"HYP: {hyp}")
+            if tr.get("decoded_trace"):
+                token_debug = tr["decoded_trace"].get("token_debug", [])
+                for td in token_debug[: min(6, len(token_debug))]:
+                    print(
+                        f"  TOK {td.get('raw_token')} | sources={td.get('sources')} | "
+                        f"fallback={td.get('used_fallback')} | top={td.get('top_candidates')}"
+                    )
+
+    return bleu
 
 
 def parse_args_notebook_safe(parser: argparse.ArgumentParser) -> argparse.Namespace:
@@ -658,6 +860,18 @@ def main() -> None:
     parser.add_argument("--self-eval", action="store_true", help="Run holdout BLEU estimate before full inference")
     parser.add_argument("--eval-fraction", type=float, default=0.12, help="Holdout fraction for --self-eval")
     parser.add_argument("--output", type=str, default="submission.csv", help="Submission CSV output path")
+    parser.add_argument(
+        "--verbose",
+        type=int,
+        default=1,
+        help="Verbosity level: 0=minimal, 1=summary, 2=trace, 3=token-detail",
+    )
+    parser.add_argument(
+        "--verbose-samples",
+        type=int,
+        default=8,
+        help="Number of worst self-eval examples to print when verbose>=2",
+    )
     args = parse_args_notebook_safe(parser)
 
     data_dir = find_data_dir()
@@ -678,12 +892,16 @@ def main() -> None:
             translit_col=translit_col,
             trans_col=trans_col,
             eval_fraction=args.eval_fraction,
+            verbose=args.verbose,
+            verbose_samples=args.verbose_samples,
         )
         print(f"[SELF-EVAL] Estimated holdout BLEU: {est_bleu:.2f}")
 
-    model = HybridAkkadianTranslator()
+    model = HybridAkkadianTranslator(config=DecoderConfig(verbose=args.verbose))
     model.fit(train_df, translit_col=translit_col, trans_col=trans_col)
     predictions = model.translate_batch(test_df[translit_col].fillna("").tolist())
+    if args.verbose >= 1:
+        model.print_debug_summary()
 
     submission = pd.DataFrame({"id": test_df[test_id_col], "translation": predictions})
     submission.to_csv(args.output, index=False)
