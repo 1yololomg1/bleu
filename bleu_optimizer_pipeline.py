@@ -638,17 +638,34 @@ def run_self_eval(
     return corpus_bleu(refs_tok, hyps_tok)
 
 
+def parse_args_notebook_safe(parser: argparse.ArgumentParser) -> argparse.Namespace:
+    """
+    Parse CLI arguments safely in both terminal and Jupyter/IPython.
+
+    Why:
+      Notebook kernels inject extra argv entries (for example '-f ...json')
+      that make argparse exit before the pipeline runs. Using parse_known_args
+      keeps intended flags while ignoring kernel internals.
+    """
+    args, unknown = parser.parse_known_args()
+    if unknown:
+        print(f"[ARGS] Ignoring unknown args: {unknown}")
+    return args
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Hybrid BLEU-optimized Akkadian translation pipeline")
     parser.add_argument("--self-eval", action="store_true", help="Run holdout BLEU estimate before full inference")
     parser.add_argument("--eval-fraction", type=float, default=0.12, help="Holdout fraction for --self-eval")
     parser.add_argument("--output", type=str, default="submission.csv", help="Submission CSV output path")
-    args = parser.parse_args()
+    args = parse_args_notebook_safe(parser)
 
     data_dir = find_data_dir()
+    print(f"[INFO] Data directory: {data_dir}")
     train_df = pd.read_csv(data_dir / "train.csv")
     test_df = pd.read_csv(data_dir / "test.csv")
     translit_col, trans_col, test_id_col = infer_columns(train_df, test_df)
+    print(f"[INFO] train rows={len(train_df)} | test rows={len(test_df)}")
 
     # Normalize noisy training target strings before fitting.
     train_df = train_df.copy()
