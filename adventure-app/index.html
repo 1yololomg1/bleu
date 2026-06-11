@@ -1,0 +1,195 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Select Your Destiny! — Waiting Room Adventures</title>
+<link rel="stylesheet" href="css/style.css">
+</head>
+<body>
+
+<button id="staffBtn" class="staffBtn" onclick="openSetup()" title="Staff settings">⚙️ Staff</button>
+
+<!-- ================= STAFF SETUP ================= -->
+<section id="view-setup" class="view">
+  <div class="card">
+    <h1 class="appTitle">⚙️ Practice Setup</h1>
+    <p class="subtitle">Done once by the office — this is how your practice, your office and you show up inside every adventure.</p>
+
+    <label class="field">Practice name *
+      <input id="setupPractice" type="text" placeholder="e.g. Sunshine Pediatrics">
+    </label>
+
+    <label class="field">Doctor's name *
+      <input id="setupDoctor" type="text" placeholder="e.g. Dr. Rivera">
+    </label>
+
+    <label class="field">Describe your office / waiting room
+      <textarea id="setupOffice" rows="3"
+        placeholder="One or two fun sentences — they appear in the opening of every story. e.g. 'The waiting room has a giant fish tank, a reading boat full of books, and a mural of hot-air balloons.'"></textarea>
+    </label>
+
+    <div class="setupSplit">
+      <div>
+        <label class="field">A short description of the doctor
+          <textarea id="setupDoctorDesc" rows="3"
+            placeholder="Used if there's no photo. e.g. 'tall, curly hair, always wearing dinosaur socks and a big smile.'"></textarea>
+        </label>
+      </div>
+      <div class="photoField">
+        <span class="fieldLabel">…or the doctor's photo</span>
+        <div id="setupDoctorPhotoPreview" class="photoPreview"><span>none yet</span></div>
+        <label class="smallBtn">📁 Upload photo
+          <input id="setupDoctorPhotoFile" type="file" accept="image/*" hidden>
+        </label>
+      </div>
+    </div>
+
+    <div class="photoField logoField">
+      <span class="fieldLabel">Practice logo (optional — appears on flags &amp; signs in the stories)</span>
+      <div id="setupLogoPreview" class="photoPreview"><span>none yet</span></div>
+      <label class="smallBtn">📁 Upload logo
+        <input id="setupLogoFile" type="file" accept="image/*" hidden>
+      </label>
+    </div>
+
+    <button class="bigBtn" onclick="saveSetup()">💾 Save &amp; open the adventure kiosk</button>
+  </div>
+</section>
+
+<!-- ================= KID START ================= -->
+<section id="view-home" class="view">
+  <div class="card">
+    <h1 class="appTitle">🌟 Select Your Destiny! 🌟</h1>
+    <p class="subtitle">A comic-book adventure starring <strong>YOU</strong> — presented by <span id="homePractice"></span></p>
+
+    <label class="field">What's your name, explorer? *
+      <input id="kidName" type="text" maxlength="20" placeholder="Type your name">
+    </label>
+    <label class="field">And your grown-up's name?
+      <input id="adultName" type="text" maxlength="20" placeholder="Mom, Dad, Grandpa Joe…">
+    </label>
+
+    <h2 class="sectionTitle">Pick your adventure!</h2>
+    <div id="themeGrid" class="themeGrid"></div>
+
+    <h2 class="sectionTitle">Pick your edition!</h2>
+    <div id="tierRow" class="tierRow">
+      <button class="tierCard" onclick="pickTier(this,'classic')">
+        <span class="tierName">🎨 Classic</span>
+        <span class="tierPrice">FREE</span>
+        <ul>
+          <li>The full comic adventure</li>
+          <li>You pick every twist</li>
+          <li>Same great story &amp; art</li>
+        </ul>
+      </button>
+      <button class="tierCard tierStar" onclick="pickTier(this,'star')">
+        <span class="tierName">⭐ Star Edition</span>
+        <span class="tierPrice">$10 <small>pay at the counter on your way out</small></span>
+        <ul>
+          <li>Everything in Classic</li>
+          <li><strong>Your real faces</strong> star in the comic — you AND your grown-up (portraits taken right here!)</li>
+          <li>Printed keepsake of your whole adventure to take home</li>
+        </ul>
+      </button>
+    </div>
+
+    <button class="bigBtn" onclick="startAdventure()">🚀 Start my adventure!</button>
+  </div>
+</section>
+
+<!-- ================= PORTRAITS (Star Edition) ================= -->
+<section id="view-portraits" class="view">
+  <div class="card">
+    <h1 class="appTitle">📸 Portrait Time!</h1>
+    <p class="subtitle">Star Edition heroes need <strong>both</strong> portraits — the explorer <em>and</em> the grown-up. Say cheese!</p>
+
+    <div class="portraitRow">
+      <div class="portraitSlot">
+        <h3 id="portraitKidName"></h3>
+        <div id="portraitKid" class="portraitCircle"><span>📷</span></div>
+        <div class="portraitBtns">
+          <button class="smallBtn" onclick="openCamera('kid')">📷 Take photo</button>
+          <label class="smallBtn">📁 Upload
+            <input type="file" accept="image/*" capture="user" hidden onchange="portraitFile('kid', this)">
+          </label>
+        </div>
+      </div>
+      <div class="portraitSlot">
+        <h3 id="portraitAdultName"></h3>
+        <div id="portraitAdult" class="portraitCircle"><span>📷</span></div>
+        <div class="portraitBtns">
+          <button class="smallBtn" onclick="openCamera('adult')">📷 Take photo</button>
+          <label class="smallBtn">📁 Upload
+            <input type="file" accept="image/*" capture="user" hidden onchange="portraitFile('adult', this)">
+          </label>
+        </div>
+      </div>
+    </div>
+
+    <button id="portraitsGo" class="bigBtn" disabled onclick="beginStory()">⭐ We're ready — into the comic!</button>
+    <button class="linkBtn" onclick="renderHome(); show('view-home')">← Back</button>
+  </div>
+</section>
+
+<!-- ================= STORY ================= -->
+<section id="view-story" class="view">
+  <div class="storyWrap">
+    <div class="storyHeader">
+      <span id="storyTheme"></span>
+      <span id="storyPanelNum"></span>
+    </div>
+    <div id="storyPanel" class="panelFrame"></div>
+    <p id="storyCaption" class="caption"></p>
+    <div class="choicesLabel">What happens next? <strong>You</strong> decide!</div>
+    <div id="storyChoices" class="choices"></div>
+  </div>
+</section>
+
+<!-- ================= ENDING ================= -->
+<section id="view-ending" class="view">
+  <div class="card">
+    <h1 class="appTitle">🎉 <span id="endTitle"></span> 🎉</h1>
+    <p class="subtitle">Amazing job, <strong id="endKid"></strong>! Your destiny took
+      <strong id="endPanels"></strong> twists and turns.</p>
+
+    <div id="endStar" class="payBox">
+      <h2>⭐ Star Edition</h2>
+      <p>Show this screen at the front desk on your way out and pay <strong>$10</strong> —
+         then your whole comic gets printed for you to take home!</p>
+      <div class="deskOnly">
+        <span>Front desk only:</span>
+        <button class="bigBtn" onclick="frontDeskPrint()">💵 $10 collected — Print adventure</button>
+      </div>
+    </div>
+
+    <div id="endClassic" class="payBox classicBox">
+      <h2>🎨 Classic Edition — all done!</h2>
+      <p>Want to <strong>BE</strong> in the comic next time — your real face on the hero, plus a printed
+         copy to keep? Ask the front desk about the <strong>⭐ $10 Star Edition</strong> on your next visit!</p>
+    </div>
+
+    <button class="bigBtn altBtn" onclick="newAdventure()">🔄 New adventure (next explorer!)</button>
+  </div>
+</section>
+
+<!-- ================= CAMERA MODAL ================= -->
+<div id="camModal" class="modal">
+  <div class="modalCard">
+    <video id="camVideo" autoplay playsinline></video>
+    <div class="modalBtns">
+      <button class="bigBtn" onclick="snapPhoto()">📸 Snap!</button>
+      <button class="smallBtn" onclick="closeCamera()">Cancel</button>
+    </div>
+  </div>
+</div>
+
+<!-- ================= PRINT AREA ================= -->
+<div id="printArea" class="printArea"></div>
+
+<script src="js/stories.js"></script>
+<script src="js/scenes.js"></script>
+<script src="js/app.js"></script>
+</body>
+</html>

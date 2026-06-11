@@ -1,0 +1,269 @@
+/* ============================================================
+   Select Your Destiny — comic-book styling
+   ============================================================ */
+
+:root {
+  --ink: #222;
+  --paper: #fffdf5;
+  --pop: #ff5252;
+  --sun: #ffca28;
+  --sky: #42a5f5;
+}
+
+* { box-sizing: border-box; }
+
+body {
+  margin: 0;
+  font-family: "Comic Sans MS", "Comic Neue", "Chalkboard SE", cursive, sans-serif;
+  background: #ffe082;
+  background-image: radial-gradient(#00000014 2px, transparent 2px);
+  background-size: 22px 22px;
+  color: var(--ink);
+  min-height: 100vh;
+}
+
+/* ---------- views ---------- */
+
+.view { display: none; padding: 24px 14px 60px; }
+.view.active { display: block; }
+
+.card, .storyWrap {
+  max-width: 880px;
+  margin: 0 auto;
+  background: var(--paper);
+  border: 5px solid var(--ink);
+  border-radius: 18px;
+  box-shadow: 8px 8px 0 #00000033;
+  padding: 26px 28px 34px;
+}
+
+.appTitle {
+  text-align: center;
+  font-size: 2.1rem;
+  margin: 0 0 6px;
+  text-shadow: 3px 3px 0 var(--sun);
+  letter-spacing: 1px;
+}
+.subtitle { text-align: center; margin: 0 0 24px; font-size: 1.05rem; }
+.sectionTitle { margin: 26px 0 12px; font-size: 1.3rem; }
+
+/* ---------- staff button ---------- */
+
+.staffBtn {
+  position: fixed; top: 10px; right: 10px; z-index: 50;
+  font-family: inherit; font-size: 0.8rem;
+  background: #fff; border: 3px solid var(--ink); border-radius: 10px;
+  padding: 5px 10px; cursor: pointer; opacity: 0.55;
+}
+.staffBtn:hover { opacity: 1; }
+
+/* ---------- forms ---------- */
+
+.field { display: block; margin: 14px 0; font-weight: bold; font-size: 1rem; }
+.fieldLabel { font-weight: bold; display: block; margin-bottom: 8px; }
+.field input, .field textarea {
+  display: block; width: 100%; margin-top: 6px;
+  font-family: inherit; font-size: 1.05rem;
+  border: 3px solid var(--ink); border-radius: 10px;
+  padding: 10px 12px; background: #fff;
+}
+.field input:focus, .field textarea:focus { outline: 3px solid var(--sky); }
+
+.setupSplit { display: grid; grid-template-columns: 1fr auto; gap: 18px; align-items: start; }
+@media (max-width: 640px) { .setupSplit { grid-template-columns: 1fr; } }
+
+.photoField { text-align: center; margin: 14px 0; }
+.photoPreview {
+  width: 110px; height: 110px; margin: 0 auto 10px;
+  border: 3px dashed var(--ink); border-radius: 14px;
+  display: flex; align-items: center; justify-content: center;
+  background: #fff; overflow: hidden; font-size: 0.8rem; color: #888;
+}
+.photoPreview img { width: 100%; height: 100%; object-fit: cover; }
+.logoField .photoPreview { border-radius: 50%; }
+
+/* ---------- buttons ---------- */
+
+.bigBtn {
+  display: block; width: 100%; margin: 22px auto 0;
+  font-family: inherit; font-size: 1.3rem; font-weight: bold;
+  background: var(--pop); color: #fff;
+  border: 4px solid var(--ink); border-radius: 14px;
+  padding: 14px 18px; cursor: pointer;
+  box-shadow: 5px 5px 0 #00000033;
+  transition: transform 0.08s;
+}
+.bigBtn:hover:not(:disabled) { transform: translate(-2px, -2px); box-shadow: 7px 7px 0 #00000033; }
+.bigBtn:disabled { background: #bbb; cursor: not-allowed; box-shadow: none; }
+.altBtn { background: var(--sky); }
+
+.smallBtn {
+  display: inline-block; font-family: inherit; font-size: 0.95rem; font-weight: bold;
+  background: var(--sun); border: 3px solid var(--ink); border-radius: 10px;
+  padding: 8px 14px; cursor: pointer; box-shadow: 3px 3px 0 #00000033;
+}
+.linkBtn {
+  display: block; margin: 14px auto 0; background: none; border: none;
+  font-family: inherit; font-size: 1rem; text-decoration: underline; cursor: pointer;
+}
+
+/* ---------- theme picker ---------- */
+
+.themeGrid {
+  display: grid; grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+  gap: 14px;
+}
+.themeCard {
+  --theme-color: var(--sky);
+  font-family: inherit; cursor: pointer;
+  background: #fff; border: 4px solid var(--ink); border-radius: 16px;
+  padding: 16px 10px; text-align: center;
+  box-shadow: 4px 4px 0 #00000022;
+  transition: transform 0.08s;
+}
+.themeCard:hover { transform: translateY(-3px); }
+.themeCard.picked {
+  background: var(--theme-color); color: #fff;
+  outline: 4px solid var(--sun);
+}
+.themeEmoji { display: block; font-size: 2.6rem; }
+.themeName { display: block; font-size: 1.15rem; font-weight: bold; margin: 6px 0 4px; }
+.themeTag { display: block; font-size: 0.85rem; }
+
+/* ---------- tiers ---------- */
+
+.tierRow { display: grid; grid-template-columns: 1fr 1fr; gap: 16px; }
+@media (max-width: 640px) { .tierRow { grid-template-columns: 1fr; } }
+.tierCard {
+  font-family: inherit; cursor: pointer; text-align: left;
+  background: #fff; border: 4px solid var(--ink); border-radius: 16px;
+  padding: 16px 18px; box-shadow: 4px 4px 0 #00000022;
+}
+.tierCard.picked { outline: 5px solid var(--pop); background: #fffde7; }
+.tierStar { background: #fff8e1; }
+.tierName { display: block; font-size: 1.25rem; font-weight: bold; }
+.tierPrice { display: block; font-size: 1.5rem; font-weight: bold; color: var(--pop); margin: 4px 0; }
+.tierPrice small { font-size: 0.75rem; color: #555; display: block; font-weight: normal; }
+.tierCard ul { margin: 8px 0 0; padding-left: 20px; font-size: 0.95rem; }
+.tierCard li { margin: 4px 0; }
+
+/* ---------- portraits ---------- */
+
+.portraitRow { display: flex; gap: 30px; justify-content: center; flex-wrap: wrap; }
+.portraitSlot { text-align: center; }
+.portraitCircle {
+  width: 160px; height: 160px; border-radius: 50%;
+  border: 5px solid var(--ink); background: #fff;
+  display: flex; align-items: center; justify-content: center;
+  font-size: 3rem; overflow: hidden; margin: 0 auto 12px;
+}
+.portraitCircle.done { border-color: #2e7d32; box-shadow: 0 0 0 5px #a5d6a7; }
+.portraitCircle img { width: 100%; height: 100%; object-fit: cover; }
+.portraitBtns { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+
+/* ---------- camera modal ---------- */
+
+.modal {
+  display: none; position: fixed; inset: 0; z-index: 100;
+  background: #000000aa; align-items: center; justify-content: center;
+}
+.modal.open { display: flex; }
+.modalCard {
+  background: var(--paper); border: 5px solid var(--ink); border-radius: 18px;
+  padding: 18px; max-width: 520px; width: 92%;
+}
+#camVideo { width: 100%; border-radius: 12px; border: 3px solid var(--ink); transform: scaleX(-1); }
+.modalBtns { display: flex; gap: 12px; align-items: center; margin-top: 10px; }
+.modalBtns .bigBtn { margin: 0; flex: 1; }
+
+/* ---------- story view ---------- */
+
+.storyHeader {
+  display: flex; justify-content: space-between; align-items: baseline;
+  font-weight: bold; font-size: 1.15rem; margin-bottom: 10px;
+}
+.panelFrame { border-radius: 8px; overflow: hidden; }
+.panelSvg { display: block; width: 100%; height: auto; font-family: inherit; }
+.panelSvg .charLabel { font-size: 17px; font-weight: bold; fill: #222; font-family: inherit; }
+.panelSvg .bubbleText { font-size: 20px; font-weight: bold; fill: #222; font-family: inherit; }
+
+.caption {
+  background: #fffde7; border: 4px solid var(--ink); border-radius: 0 0 14px 14px;
+  border-top: none; margin: 0 0 18px; padding: 14px 18px;
+  font-size: 1.15rem; line-height: 1.5;
+}
+.choicesLabel { font-weight: bold; margin-bottom: 10px; font-size: 1.1rem; }
+.choices { display: grid; gap: 12px; }
+.choiceBtn {
+  font-family: inherit; font-size: 1.15rem; font-weight: bold; text-align: left;
+  background: #fff; border: 4px solid var(--ink); border-radius: 14px;
+  padding: 14px 18px; cursor: pointer; box-shadow: 4px 4px 0 #00000022;
+  transition: transform 0.08s;
+}
+.choiceBtn:hover { transform: translate(-2px, -2px); background: #e3f2fd; }
+.endBanner {
+  text-align: center; font-size: 1.8rem; font-weight: bold;
+  text-shadow: 2px 2px 0 var(--sun); margin: 6px 0;
+}
+
+/* ---------- ending / payment ---------- */
+
+.payBox {
+  border: 4px dashed var(--pop); border-radius: 16px;
+  background: #fff8e1; padding: 16px 20px; margin: 18px 0;
+  text-align: center;
+}
+.payBox h2 { margin: 0 0 8px; }
+.classicBox { border-color: var(--sky); background: #e3f2fd; }
+.deskOnly {
+  margin-top: 14px; padding-top: 12px; border-top: 2px solid #00000022;
+  font-size: 0.85rem; color: #555;
+}
+.deskOnly .bigBtn { margin-top: 8px; background: #2e7d32; }
+
+/* ============================================================
+   PRINT — the take-home comic
+   ============================================================ */
+
+.printArea { display: none; }
+
+@media print {
+  body { background: #fff; }
+  .view, .staffBtn, .modal { display: none !important; }
+  .printArea { display: block; font-family: "Comic Sans MS", "Comic Neue", cursive, sans-serif; color: #222; }
+
+  .printTitlePage {
+    text-align: center; padding: 60px 20px 30px;
+    page-break-after: always;
+  }
+  .printLogo { max-width: 140px; max-height: 140px; margin-bottom: 14px; }
+  .printPractice { font-size: 1.2rem; font-weight: bold; letter-spacing: 2px; text-transform: uppercase; }
+  .printTitlePage h1 { font-size: 2.6rem; margin: 18px 0 4px; }
+  .printTitlePage h2 { font-size: 1.6rem; margin: 0 0 18px; font-style: italic; }
+  .printStarring { font-size: 1.2rem; }
+  .printDate { color: #666; }
+  .printPaid {
+    display: inline-block; margin-top: 24px; padding: 10px 24px;
+    border: 4px solid #222; border-radius: 14px; font-size: 1.2rem; font-weight: bold;
+  }
+
+  .printGrid { display: block; }
+  .printPanel {
+    page-break-inside: avoid;
+    margin: 0 auto 22px; max-width: 640px; position: relative;
+  }
+  .printPanel svg { width: 100%; height: auto; }
+  .printPanelNum {
+    position: absolute; top: -8px; left: -8px; z-index: 2;
+    width: 34px; height: 34px; border-radius: 50%;
+    background: #222; color: #fff; font-weight: bold;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .printCaption {
+    border: 3px solid #222; border-top: none; border-radius: 0 0 10px 10px;
+    margin: 0; padding: 10px 14px; font-size: 0.95rem; line-height: 1.45;
+  }
+  .printFooter {
+    text-align: center; margin-top: 26px; font-size: 0.9rem; color: #555;
+  }
+}
