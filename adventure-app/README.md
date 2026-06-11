@@ -1,64 +1,101 @@
 # 🌟 Select Your Destiny! — Waiting Room Adventures
 
-A choose-your-own-adventure **comic book webapp for pediatric offices**.
+A choose-your-own-adventure **comic book platform for pediatric offices**.
 Kids pick a theme, make every choice, and star in a stick-figure comic where
-**their own doctor and office appear throughout the story**.
+**their own doctor and office appear throughout the story** — read aloud for
+kids who can't read yet, with a brand-new AI-written story every visit.
 
-No server, no build step, no accounts — a single static page that runs on any
-waiting-room tablet or kiosk browser. Open `index.html` and go.
+Now a small hosted site: doctors log in to a dashboard, every practice gets its
+own kiosk link, and every printout is metered (that's the billing record).
+
+## Running it
+
+```bash
+cd adventure-app
+npm install
+ANTHROPIC_API_KEY=sk-ant-...   # optional — enables fresh AI stories
+ADMIN_EMAIL=you@platform.com   # optional — that account sees all-practice revenue
+npm start                      # http://localhost:3000
+```
+
+Node 22.5+ (uses the built-in `node:sqlite`). The only dependency is
+`@anthropic-ai/sdk`. Data lives in `data/syd.db` (override with `SYD_DB`).
 
 ## How it works
 
-### 1. One-time practice setup (staff)
-The ⚙️ Staff button opens a setup screen where the office enters:
-- **Practice name** and **doctor's name** — woven into every story
-- **A description of the office/waiting room** — becomes the opening of each adventure
-- **A description of the doctor** *or* **the doctor's photo** — if there's a photo,
-  the doctor's real face appears on their stick figure; otherwise the written
-  description is woven into the story when the doctor first appears
-- **Practice logo** (optional) — shows up on signs, flags and rocket banners inside the panels
+### 1. Doctor dashboard (`/dashboard`)
+Each practice creates an account and can update everything **any time, from
+anywhere** — the waiting-room kiosk picks changes up instantly:
+- Practice + doctor name, **office/waiting-room description** (opens every story)
+- **Doctor description or photo** — photo puts the doctor's real face on their
+  stick figure; otherwise the description is woven into the story text
+- **Logo** — appears on signs and flags inside the comic panels
+- **Seasonal mode** 🎄🎃 — winter/spring/summer/halloween adds seasonal art to
+  every panel and a seasonal opening line (switch it on for the holidays, off in January)
 
-Settings are saved in the browser (`localStorage`), so setup happens once per device.
+The dashboard also shows the money side:
+- Adventures played, **Star printouts all-time / this month**, and **$ collected
+  at the counter** (each printout = $10 collected)
+- A recent-printouts table per practice
+- If `ADMIN_EMAIL` matches the logged-in account, an **all-practices table**
+  (plays, prints, monthly counts, collected totals) — the platform's billing view
 
-### 2. Kid picks an adventure
-Four themes, each a branching story with multiple endings (~5–7 panels per playthrough):
-- 🚀 **Blast Off to Space**
-- 🦕 **Dinosaur Discovery**
-- 🐙 **Deep Sea Quest**
-- 🦸 **Super Hero Day**
+### 2. Kid kiosk (`/k/<code>`)
+Every practice gets a unique kiosk link to open on the waiting-room tablet.
 
-The doctor appears throughout each story — handing out space badges, arriving in a
-jungle jeep, diving in with waterproof bandages, springing sticker traps.
+- **Four themes** (space, dinosaurs, ocean, superhero), branching stories,
+  multiple endings, the doctor appearing throughout as the hero's helper
+- **🔊 Read aloud** — captions and choices are spoken via the browser's built-in
+  Web Speech API (no extra service, works offline), so pre-readers can play
+  solo; toggleable, with a "read it again" button
+- **✨ AI stories** — when `ANTHROPIC_API_KEY` is set, every adventure is written
+  fresh by Claude (`claude-opus-4-8`, structured JSON output constrained to the
+  exact scene vocabulary the SVG renderer understands, then server-side
+  validated: reachability, endings, doctor appearances). If the API is slow,
+  down, or returns something invalid, the kiosk silently falls back to the
+  built-in story library — it never breaks in front of a kid.
 
 ### 3. Two editions — same stories, same art
 | | 🎨 Classic — FREE | ⭐ Star Edition — $10 |
 |---|---|---|
-| Full comic adventure, every choice | ✅ | ✅ |
+| Full comic adventure, every choice, read-aloud | ✅ | ✅ |
 | Kid **and** grown-up's real faces on the stick figures (both portraits required) | — | ✅ |
 | Printed keepsake of the whole adventure | — | ✅ |
 
-Star Edition portraits are taken right at the kiosk (webcam) or uploaded — the
-kid's **and** the adult's, both required before the story starts.
-
-### 4. Pay at the counter, leave with a comic
+### 4. Pay at the counter → print → it's metered
 The Star Edition ending screen says to show it at the front desk and pay **$10**
-on the way out. The front desk hits **"$10 collected — Print adventure"**, which
-prints a take-home comic: a title page (logo, practice name, story title,
-"Starring …", PAID badge) followed by every panel of the exact path the kid chose.
+on the way out. The front desk taps **"$10 collected — Print adventure"**, which
+records the printout server-side (theme, panel count, $10) and prints the
+take-home comic: title page with logo + "Starring …" + PAID badge, then every
+panel of the exact path the kid chose. Those records are what the dashboard
+totals — and what the platform bills practices from.
 
 ## Files
 
 ```
 adventure-app/
-├── index.html        # all views: setup, start, portraits, story, ending, print
-├── css/style.css     # comic-book styling + print stylesheet
-└── js/
-    ├── stories.js    # 4 themed branching story graphs (33 panels)
-    ├── scenes.js     # SVG comic renderer: stick figures, photo faces, props, bubbles
-    └── app.js        # flow, templating, portraits/camera, payment + print
+├── server.js            # zero-framework Node server: auth, settings, kiosk API, metering
+├── lib/
+│   ├── db.js            # node:sqlite schema (practices, sessions, plays, prints)
+│   ├── auth.js          # scrypt password hashing + cookie sessions
+│   └── storygen.js      # Claude story generation: JSON-schema output + graph validation
+└── public/
+    ├── dashboard.html   # doctor login + settings + revenue stats (+ platform admin)
+    ├── kiosk.html       # kid-facing flow
+    ├── css/style.css
+    └── js/
+        ├── stories.js   # built-in story library (also the offline fallback)
+        ├── scenes.js    # SVG comic renderer + seasonal overlays
+        └── app.js       # kiosk flow, TTS, portraits, print
 ```
 
-## Notes
-- Photos and the logo never leave the device — everything is stored locally in the browser.
-- "New adventure" resets for the next kid; portraits are kept only for the current session.
-- Camera capture needs HTTPS (or localhost) in most browsers; the Upload button always works.
+## Production notes
+- Serve over **HTTPS** (required for the kiosk camera; use any reverse proxy).
+- Portraits taken at the kiosk stay **in the browser for that session only** —
+  they are never uploaded. Only the doctor's photo/logo (uploaded by the
+  practice) and anonymous play/print counts are stored server-side. Kid names
+  go to the Claude API only for story personalization and are not stored.
+- The kid's name and theme are sent to the story endpoint; no other patient
+  data ever leaves the device. No PHI is collected or stored.
+- Story cost: one Claude call per adventure (~a few cents on `claude-opus-4-8`;
+  set `STORY_MODEL` to change models).

@@ -1,26 +1,18 @@
 /* ============================================================
-   Select Your Destiny — App
-   Flow: staff setup → kid start (theme + tier) → portraits
-   (Star Edition) → comic adventure → ending → pay at counter
-   → front-desk print of the whole adventure.
+   Select Your Destiny — Kiosk App
+   Served at /k/<kioskCode>. Practice settings come from the
+   server (managed in the doctor dashboard). Stories are written
+   fresh by the Claude API when available, with the built-in
+   library as an always-works fallback. Captions and choices can
+   be read aloud for pre-readers via the Web Speech API.
    ============================================================ */
 
-const CONFIG_KEY = "syd_config_v1";
+const KIOSK_CODE = (location.pathname.match(/^\/k\/([a-z0-9]+)/) || [])[1] || "";
 
-let config = loadConfig();
-let session = null; // { kidName, adultName, themeId, tier, faces, path }
+let config = null;   // practice config from server
+let session = null;  // { kidName, adultName, themeId, tier, faces, path, story, source }
 let camStream = null;
 let camTarget = null;
-
-function loadConfig() {
-  try { return JSON.parse(localStorage.getItem(CONFIG_KEY)) || null; }
-  catch { return null; }
-}
-function saveConfig(c) {
-  config = c;
-  try { localStorage.setItem(CONFIG_KEY, JSON.stringify(c)); }
-  catch (e) { alert("Could not save settings (photos/logo may be too large for this browser's storage). Try smaller images."); }
-}
 
 /* ---------- view switching ---------- */
 
@@ -56,9 +48,51 @@ function sceneCtx() {
       practice: config.practice || ""
     },
     logo: config.logo || null,
-    themeColor: session ? THEMES[session.themeId].color : "#1565c0",
+    season: config.season && config.season !== "none" ? config.season : null,
+    themeColor: session && session.story ? session.story.color : "#1565c0",
     fill: fillText
   };
+}
+
+/* ---------- read-aloud (Web Speech API) ---------- */
+
+const tts = {
+  enabled: localStorage.getItem("syd_tts") !== "off",
+  available: "speechSynthesis" in window,
+  speak(parts) {
+    if (!this.available || !this.enabled) return;
+    this.stop();
+    const utter = new SpeechSynthesisUtterance(parts.join(" ... "));
+    utter.rate = 0.95;
+    utter.pitch = 1.1;
+    speechSynthesis.speak(utter);
+  },
+  stop() { if (this.available) speechSynthesis.cancel(); },
+  toggle() {
+    this.enabled = !this.enabled;
+    localStorage.setItem("syd_tts", this.enabled ? "on" : "off");
+    if (!this.enabled) this.stop();
+    updateTtsButtons();
+  }
+};
+
+function updateTtsButtons() {
+  const toggle = document.getElementById("ttsToggle");
+  if (toggle) {
+    toggle.textContent = tts.enabled ? "🔊 Read aloud: ON" : "🔇 Read aloud: off";
+    toggle.classList.toggle("ttsOff", !tts.enabled);
+  }
+}
+
+function speakCurrentPanel() {
+  if (!tts.enabled) return;
+  const caption = document.getElementById("storyCaption").textContent;
+  const choices = [...document.querySelectorAll("#storyChoices .choiceBtn")]
+    .map((b, i) => `Choice ${i + 1}: ${b.textContent}`);
+  const parts = [caption];
+  if (choices.length) parts.push("What happens next?", ...choices);
+  else if (document.querySelector("#storyChoices .endBanner")) parts.push("The end! Great job!");
+  tts.speak(parts);
 }
 
 /* ---------- image helpers ---------- */
@@ -88,46 +122,6 @@ function squareCropFromVideo(video, side) {
   canvas.width = canvas.height = side;
   canvas.getContext("2d").drawImage(video, sx, sy, s, s, 0, 0, side, side);
   return canvas.toDataURL("image/jpeg", 0.85);
-}
-
-/* ============================================================
-   STAFF SETUP
-   ============================================================ */
-
-function openSetup() {
-  const c = config || {};
-  document.getElementById("setupPractice").value = c.practice || "";
-  document.getElementById("setupDoctor").value = c.doctorName || "";
-  document.getElementById("setupOffice").value = c.officeDesc || "";
-  document.getElementById("setupDoctorDesc").value = c.doctorDesc || "";
-  setPreview("setupDoctorPhotoPreview", c.doctorPhoto);
-  setPreview("setupLogoPreview", c.logo);
-  show("view-setup");
-}
-
-function setPreview(id, dataUrl) {
-  const el = document.getElementById(id);
-  el.innerHTML = dataUrl ? `<img src="${dataUrl}" alt="">` : "<span>none yet</span>";
-  el.dataset.value = dataUrl || "";
-}
-
-function saveSetup() {
-  const practice = document.getElementById("setupPractice").value.trim();
-  const doctorName = document.getElementById("setupDoctor").value.trim();
-  if (!practice || !doctorName) {
-    alert("Please fill in the practice name and the doctor's name.");
-    return;
-  }
-  saveConfig({
-    practice,
-    doctorName,
-    officeDesc: document.getElementById("setupOffice").value.trim(),
-    doctorDesc: document.getElementById("setupDoctorDesc").value.trim(),
-    doctorPhoto: document.getElementById("setupDoctorPhotoPreview").dataset.value || "",
-    logo: document.getElementById("setupLogoPreview").dataset.value || ""
-  });
-  renderHome();
-  show("view-home");
 }
 
 /* ============================================================
@@ -179,6 +173,7 @@ function startAdventure() {
     themeId, tier,
     faces: { kid: null, adult: null },
     path: [],
+    story: null, source: "builtin",
     doctorIntroDone: false
   };
 
@@ -186,7 +181,7 @@ function startAdventure() {
     renderPortraits();
     show("view-portraits");
   } else {
-    beginStory();
+    fetchStoryAndBegin();
   }
 }
 
@@ -243,22 +238,62 @@ function closeCamera() {
 }
 
 /* ============================================================
-   STORY ENGINE
+   STORY FETCH + ENGINE
    ============================================================ */
 
-function theme() { return THEMES[session.themeId]; }
+async function fetchStoryAndBegin() {
+  const builtin = THEMES[session.themeId];
+  if (!config.aiStories) {
+    session.story = builtin; session.source = "builtin";
+    return beginStory();
+  }
+
+  show("view-loading");
+  try {
+    const resp = await fetch(`/api/kiosk/${KIOSK_CODE}/story`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        theme: builtin.name,
+        kidName: session.kidName,
+        adultName: session.adultName
+      })
+    });
+    const data = await resp.json();
+    if (data.source === "ai" && data.story) {
+      session.story = data.story; session.source = "ai";
+    } else {
+      session.story = builtin; session.source = "builtin";
+    }
+  } catch (e) {
+    session.story = builtin; session.source = "builtin";
+  }
+  beginStory();
+}
+
+function story() { return session.story; }
+
+const SEASON_LINES = {
+  winter: "Snowflakes sparkle on the windows — it's a frosty-magic kind of day!",
+  spring: "Flowers are popping up everywhere — spring magic is in the air!",
+  summer: "It's a sunny summer day, perfect for an adventure!",
+  halloween: "Friendly pumpkins grin from every corner — happy Halloween!"
+};
 
 function beginStory() {
   session.path = [];
   session.doctorIntroDone = false;
-  goToNode(theme().start);
+  goToNode(story().start);
   show("view-story");
 }
 
-function nodeCaption(node) {
+function nodeCaption(node, isFirst) {
   let text = fillText(node.text);
+  if (isFirst && config.season && SEASON_LINES[config.season]) {
+    text = SEASON_LINES[config.season] + " " + text;
+  }
   // First time the doctor walks into the story without a photo,
-  // weave in the staff-written description of them.
+  // weave in the practice-written description of them.
   const docInScene = (node.scene.cast || []).some(c => c.who === "doctor");
   if (docInScene && !session.doctorIntroDone) {
     session.doctorIntroDone = true;
@@ -270,11 +305,12 @@ function nodeCaption(node) {
 }
 
 function goToNode(nodeId) {
-  const node = theme().nodes[nodeId];
-  const caption = nodeCaption(node);
+  const node = story().nodes[nodeId];
+  const caption = nodeCaption(node, session.path.length === 0);
   session.path.push({ id: nodeId, caption });
 
-  document.getElementById("storyTheme").textContent = `${theme().emoji} ${theme().name}`;
+  document.getElementById("storyTheme").textContent =
+    `${story().emoji} ${story().name}` + (session.source === "ai" ? " ✨" : "");
   document.getElementById("storyPanelNum").textContent = `Panel ${session.path.length}`;
   document.getElementById("storyPanel").innerHTML =
     renderScene({ ...node.scene, bubble: node.bubble }, sceneCtx());
@@ -301,6 +337,7 @@ function goToNode(nodeId) {
       choiceBox.appendChild(btn);
     });
   }
+  speakCurrentPanel();
 }
 
 /* ============================================================
@@ -308,6 +345,7 @@ function goToNode(nodeId) {
    ============================================================ */
 
 function finishStory(endNode) {
+  tts.stop();
   session.endTitle = endNode.title || "The End";
   document.getElementById("endTitle").textContent = session.endTitle;
   document.getElementById("endKid").textContent = session.kidName;
@@ -317,15 +355,28 @@ function finishStory(endNode) {
   document.getElementById("endStar").style.display = isStar ? "" : "none";
   document.getElementById("endClassic").style.display = isStar ? "none" : "";
   show("view-ending");
+
+  fetch(`/api/kiosk/${KIOSK_CODE}/play`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ tier: session.tier, theme: session.themeId, source: session.source })
+  }).catch(() => {});
 }
 
-function frontDeskPrint() {
+async function frontDeskPrint() {
+  try {
+    await fetch(`/api/kiosk/${KIOSK_CODE}/print`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ theme: session.themeId, panels: session.path.length })
+    });
+  } catch (e) { /* printing still proceeds; counts can be reconciled later */ }
   buildPrintout();
   window.print();
 }
 
 function buildPrintout() {
-  const t = theme();
+  const t = story();
   const ctx = sceneCtx();
   const area = document.getElementById("printArea");
   const today = new Date().toLocaleDateString(undefined, { year: "numeric", month: "long", day: "numeric" });
@@ -335,12 +386,12 @@ function buildPrintout() {
     <div class="printTitlePage">
       ${logoImg}
       <div class="printPractice">${escHtml(config.practice)}</div>
-      <h1>${t.emoji} ${escHtml(fillText(session.endTitle ? t.name : t.name))}</h1>
+      <h1>${t.emoji} ${escHtml(t.name)}</h1>
       <h2>"${escHtml(session.endTitle || "The Adventure")}"</h2>
       <p class="printStarring">Starring <strong>${escHtml(session.kidName)}</strong>
         ${session.tier === "star" ? `&amp; <strong>${escHtml(session.adultName)}</strong>` : ""}
         — with ${escHtml(config.doctorName)}</p>
-      <p class="printDate">${today}</p>
+      <p class="printDate">${today}${session.source === "ai" ? " • a one-of-a-kind story written just for you" : ""}</p>
       ${session.tier === "star" ? `<div class="printPaid">⭐ STAR EDITION — PAID $10 ⭐</div>` : ""}
     </div>
     <div class="printGrid">`;
@@ -369,6 +420,7 @@ function escHtml(s) {
 }
 
 function newAdventure() {
+  tts.stop();
   session = null;
   document.getElementById("printArea").innerHTML = "";
   renderHome();
@@ -377,20 +429,19 @@ function newAdventure() {
 
 /* ---------- boot ---------- */
 
-window.addEventListener("DOMContentLoaded", () => {
-  document.getElementById("setupDoctorPhotoFile").addEventListener("change", function () {
-    if (this.files && this.files[0]) readImageFile(this.files[0], 400, d => setPreview("setupDoctorPhotoPreview", d));
-    this.value = "";
-  });
-  document.getElementById("setupLogoFile").addEventListener("change", function () {
-    if (this.files && this.files[0]) readImageFile(this.files[0], 300, d => setPreview("setupLogoPreview", d));
-    this.value = "";
-  });
-
-  if (!config) {
-    openSetup();
-  } else {
+window.addEventListener("DOMContentLoaded", async () => {
+  updateTtsButtons();
+  if (!KIOSK_CODE) {
+    document.getElementById("kioskError").style.display = "";
+    return;
+  }
+  try {
+    const resp = await fetch(`/api/kiosk/${KIOSK_CODE}/config`);
+    if (!resp.ok) throw new Error("bad code");
+    config = await resp.json();
     renderHome();
     show("view-home");
+  } catch (e) {
+    document.getElementById("kioskError").style.display = "";
   }
 });

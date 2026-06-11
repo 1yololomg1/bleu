@@ -1,0 +1,298 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Select Your Destiny — Practice Dashboard</title>
+<link rel="stylesheet" href="/css/style.css">
+</head>
+<body class="dashBody">
+
+<!-- ================= AUTH ================= -->
+<section id="view-auth" class="view active">
+  <div class="card dashCard">
+    <h1 class="appTitle">🩺 Practice Dashboard</h1>
+    <p class="subtitle">Select Your Destiny — waiting room adventures</p>
+
+    <div class="authTabs">
+      <button id="tabLogin" class="authTab picked" onclick="authMode('login')">Log in</button>
+      <button id="tabSignup" class="authTab" onclick="authMode('signup')">Create account</button>
+    </div>
+
+    <label class="field">Email
+      <input id="authEmail" type="email" placeholder="you@yourpractice.com">
+    </label>
+    <label class="field">Password
+      <input id="authPassword" type="password" placeholder="At least 8 characters">
+    </label>
+    <div id="signupFields" style="display:none">
+      <label class="field">Practice name
+        <input id="authPractice" type="text" placeholder="e.g. Sunshine Pediatrics">
+      </label>
+      <label class="field">Doctor's name
+        <input id="authDoctor" type="text" placeholder="e.g. Dr. Rivera">
+      </label>
+    </div>
+
+    <p id="authError" class="formError"></p>
+    <button class="bigBtn" onclick="submitAuth()">Continue</button>
+  </div>
+</section>
+
+<!-- ================= DASHBOARD ================= -->
+<section id="view-dash" class="view">
+  <div class="card dashCard">
+    <div class="dashHeader">
+      <h1 class="appTitle" style="font-size:1.6rem">🩺 <span id="dashPractice"></span></h1>
+      <button class="smallBtn" onclick="logout()">Log out</button>
+    </div>
+
+    <div class="kioskLinkBox">
+      <strong>Your waiting-room kiosk link:</strong>
+      <div class="kioskLinkRow">
+        <code id="kioskLink"></code>
+        <button class="smallBtn" onclick="copyKioskLink()">📋 Copy</button>
+        <a id="kioskOpen" class="smallBtn" target="_blank" rel="noopener">▶️ Open kiosk</a>
+      </div>
+      <small>Open this on the waiting-room tablet. Settings below apply instantly — no kiosk restart needed.</small>
+      <div id="aiBadge" class="aiBadge"></div>
+    </div>
+
+    <h2 class="sectionTitle">📊 This practice</h2>
+    <div class="statRow">
+      <div class="statCard"><span id="statPlays">–</span>adventures played</div>
+      <div class="statCard"><span id="statPrints">–</span>Star printouts (all time)</div>
+      <div class="statCard"><span id="statMonth">–</span>printouts this month</div>
+      <div class="statCard"><span id="statMoney">–</span>collected at the counter</div>
+    </div>
+    <details class="recentBox">
+      <summary>Recent printouts</summary>
+      <table class="dashTable" id="recentTable">
+        <thead><tr><th>When</th><th>Theme</th><th>Panels</th><th>Amount</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </details>
+
+    <h2 class="sectionTitle">⚙️ Story &amp; office settings</h2>
+    <label class="field">Practice name *
+      <input id="setName" type="text">
+    </label>
+    <label class="field">Doctor's name *
+      <input id="setDoctor" type="text">
+    </label>
+    <label class="field">Describe your office / waiting room
+      <textarea id="setOffice" rows="3"
+        placeholder="One or two fun sentences — they open every story. e.g. 'The waiting room has a giant fish tank and a reading boat full of books.'"></textarea>
+    </label>
+
+    <div class="setupSplit">
+      <div>
+        <label class="field">A short description of the doctor
+          <textarea id="setDoctorDesc" rows="3"
+            placeholder="Used if there's no photo. e.g. 'tall, curly hair, always wearing dinosaur socks and a big smile.'"></textarea>
+        </label>
+      </div>
+      <div class="photoField">
+        <span class="fieldLabel">…or the doctor's photo</span>
+        <div id="setDoctorPhotoPreview" class="photoPreview"><span>none yet</span></div>
+        <label class="smallBtn">📁 Upload photo
+          <input id="setDoctorPhotoFile" type="file" accept="image/*" hidden>
+        </label>
+        <button class="linkBtn" onclick="clearImage('setDoctorPhotoPreview')">remove</button>
+      </div>
+    </div>
+
+    <div class="setupSplit">
+      <div class="photoField">
+        <span class="fieldLabel">Practice logo (shows on signs &amp; flags in the comics)</span>
+        <div id="setLogoPreview" class="photoPreview"><span>none yet</span></div>
+        <label class="smallBtn">📁 Upload logo
+          <input id="setLogoFile" type="file" accept="image/*" hidden>
+        </label>
+        <button class="linkBtn" onclick="clearImage('setLogoPreview')">remove</button>
+      </div>
+      <div>
+        <label class="field">Seasonal mode 🎄🎃
+          <select id="setSeason">
+            <option value="none">None</option>
+            <option value="winter">Winter / holidays ❄️</option>
+            <option value="spring">Spring 🌸</option>
+            <option value="summer">Summer ☀️</option>
+            <option value="halloween">Halloween 🎃</option>
+          </select>
+        </label>
+        <small>Adds seasonal art to every comic panel and a seasonal opening line — change it any time, the kiosk updates instantly.</small>
+      </div>
+    </div>
+
+    <p id="saveError" class="formError"></p>
+    <button class="bigBtn" onclick="saveSettings()">💾 Save settings</button>
+    <p id="saveOk" class="saveOk"></p>
+
+    <div id="adminSection" style="display:none">
+      <h2 class="sectionTitle">🏦 All practices (platform admin)</h2>
+      <table class="dashTable" id="adminTable">
+        <thead><tr><th>Practice</th><th>Email</th><th>Plays</th><th>Prints</th><th>This month</th><th>Collected</th></tr></thead>
+        <tbody></tbody>
+      </table>
+    </div>
+  </div>
+</section>
+
+<script>
+let me = null;
+
+function $(id) { return document.getElementById(id); }
+
+function showView(id) {
+  document.querySelectorAll(".view").forEach(v => v.classList.remove("active"));
+  $(id).classList.add("active");
+}
+
+function authMode(mode) {
+  $("tabLogin").classList.toggle("picked", mode === "login");
+  $("tabSignup").classList.toggle("picked", mode === "signup");
+  $("signupFields").style.display = mode === "signup" ? "" : "none";
+  $("authError").textContent = "";
+}
+
+async function api(method, url, body) {
+  const resp = await fetch(url, {
+    method,
+    headers: body ? { "Content-Type": "application/json" } : {},
+    body: body ? JSON.stringify(body) : undefined
+  });
+  const data = await resp.json().catch(() => ({}));
+  if (!resp.ok) throw new Error(data.error || "Request failed");
+  return data;
+}
+
+async function submitAuth() {
+  const signup = $("tabSignup").classList.contains("picked");
+  $("authError").textContent = "";
+  try {
+    if (signup) {
+      await api("POST", "/api/signup", {
+        email: $("authEmail").value, password: $("authPassword").value,
+        practice: $("authPractice").value, doctorName: $("authDoctor").value
+      });
+    } else {
+      await api("POST", "/api/login", {
+        email: $("authEmail").value, password: $("authPassword").value
+      });
+    }
+    loadDashboard();
+  } catch (e) { $("authError").textContent = e.message; }
+}
+
+async function logout() {
+  await api("POST", "/api/logout", {});
+  showView("view-auth");
+}
+
+function money(cents) { return "$" + (cents / 100).toFixed(2); }
+
+function copyKioskLink() {
+  navigator.clipboard.writeText($("kioskLink").textContent)
+    .then(() => { $("saveOk").textContent = "✅ Kiosk link copied."; })
+    .catch(() => {});
+}
+
+function setPreview(id, dataUrl) {
+  const el = $(id);
+  el.innerHTML = dataUrl ? `<img src="${dataUrl}" alt="">` : "<span>none yet</span>";
+  el.dataset.value = dataUrl || "";
+}
+function clearImage(id) { setPreview(id, ""); }
+
+function readImageFile(file, maxSide, cb) {
+  const reader = new FileReader();
+  reader.onload = () => {
+    const img = new Image();
+    img.onload = () => {
+      const ratio = Math.min(1, maxSide / Math.max(img.width, img.height));
+      const canvas = document.createElement("canvas");
+      canvas.width = Math.round(img.width * ratio);
+      canvas.height = Math.round(img.height * ratio);
+      canvas.getContext("2d").drawImage(img, 0, 0, canvas.width, canvas.height);
+      cb(canvas.toDataURL("image/jpeg", 0.82));
+    };
+    img.src = reader.result;
+  };
+  reader.readAsDataURL(file);
+}
+
+async function loadDashboard() {
+  try {
+    me = await api("GET", "/api/me");
+  } catch {
+    showView("view-auth");
+    return;
+  }
+  const s = me.settings;
+  $("dashPractice").textContent = s.name;
+  const link = `${location.origin}/k/${me.kioskCode}`;
+  $("kioskLink").textContent = link;
+  $("kioskOpen").href = link;
+  $("aiBadge").textContent = me.aiStories
+    ? "✨ AI stories: ON — every adventure is written fresh by Claude"
+    : "📚 AI stories: off — using the built-in story library (set ANTHROPIC_API_KEY on the server to enable)";
+
+  $("statPlays").textContent = me.stats.plays;
+  $("statPrints").textContent = me.stats.prints;
+  $("statMonth").textContent = me.stats.printsThisMonth;
+  $("statMoney").textContent = money(me.stats.collectedCents);
+  const tbody = $("recentTable").querySelector("tbody");
+  tbody.innerHTML = me.stats.recentPrints.map(p =>
+    `<tr><td>${p.created_at}</td><td>${p.theme}</td><td>${p.panels}</td><td>${money(p.amount_cents)}</td></tr>`
+  ).join("") || "<tr><td colspan='4'>No printouts yet.</td></tr>";
+
+  $("setName").value = s.name;
+  $("setDoctor").value = s.doctor_name;
+  $("setOffice").value = s.office_desc;
+  $("setDoctorDesc").value = s.doctor_desc;
+  $("setSeason").value = s.season || "none";
+  setPreview("setDoctorPhotoPreview", s.doctor_photo);
+  setPreview("setLogoPreview", s.logo);
+
+  if (me.isAdmin) {
+    $("adminSection").style.display = "";
+    const data = await api("GET", "/api/admin/stats");
+    $("adminTable").querySelector("tbody").innerHTML = data.practices.map(p =>
+      `<tr><td>${p.name}</td><td>${p.email}</td><td>${p.plays}</td><td>${p.prints}</td>
+       <td>${p.prints_this_month}</td><td>${money(p.collected_cents)}</td></tr>`).join("");
+  }
+  showView("view-dash");
+}
+
+async function saveSettings() {
+  $("saveError").textContent = ""; $("saveOk").textContent = "";
+  try {
+    await api("PUT", "/api/practice", {
+      name: $("setName").value.trim(),
+      doctor_name: $("setDoctor").value.trim(),
+      office_desc: $("setOffice").value.trim(),
+      doctor_desc: $("setDoctorDesc").value.trim(),
+      doctor_photo: $("setDoctorPhotoPreview").dataset.value || "",
+      logo: $("setLogoPreview").dataset.value || "",
+      season: $("setSeason").value
+    });
+    $("saveOk").textContent = "✅ Saved — the kiosk is already using the new settings.";
+    $("dashPractice").textContent = $("setName").value.trim();
+  } catch (e) { $("saveError").textContent = e.message; }
+}
+
+window.addEventListener("DOMContentLoaded", () => {
+  $("setDoctorPhotoFile").addEventListener("change", function () {
+    if (this.files && this.files[0]) readImageFile(this.files[0], 400, d => setPreview("setDoctorPhotoPreview", d));
+    this.value = "";
+  });
+  $("setLogoFile").addEventListener("change", function () {
+    if (this.files && this.files[0]) readImageFile(this.files[0], 300, d => setPreview("setLogoPreview", d));
+    this.value = "";
+  });
+  loadDashboard();
+});
+</script>
+</body>
+</html>

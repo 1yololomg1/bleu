@@ -433,6 +433,56 @@ function speechBubble(scene, ctx) {
     </g>`;
 }
 
+/* ---------- seasonal overlays (set by the practice dashboard) ---------- */
+
+const SEASONS_ART = {
+  winter() {
+    let flakes = "<g fill='#fff' stroke='#b3e5fc' stroke-width='1'>";
+    const pts = [[60,50],[170,110],[300,40],[430,100],[560,55],[690,115],[120,180],[640,190],[370,150],[740,60],[230,90],[500,170]];
+    pts.forEach(([x, y], i) => { flakes += `<circle cx="${x}" cy="${y}" r="${4 + (i % 3)}"/>`; });
+    flakes += "</g>";
+    let drift = "<path d='M 0 0 L 800 0 L 800 12 ";
+    for (let x = 800; x >= 0; x -= 60) drift += `Q ${x - 30} 30 ${x - 60} 12 `;
+    drift += "Z' fill='#fff' opacity='0.9'/>";
+    return flakes + drift;
+  },
+  halloween() {
+    return `
+      <g stroke="#222" stroke-width="3">
+        <ellipse cx="60" cy="378" rx="26" ry="20" fill="#ff8f00"/>
+        <rect x="55" y="352" width="10" height="10" rx="3" fill="#33691e"/>
+        <path d="M 50 372 l 6 6 6 -6 M 64 372 l 6 6 6 -6" fill="none" stroke="#4e2600" stroke-width="2.5"/>
+        <ellipse cx="748" cy="380" rx="22" ry="17" fill="#ff8f00"/>
+        <rect x="744" y="358" width="8" height="9" rx="3" fill="#33691e"/>
+      </g>
+      <path d="M 360 60 q 14 -18 28 0 q 6 -10 14 -2 q 8 -8 14 2 q 14 -18 28 0 l -14 12 -28 -6 -28 6 Z"
+            fill="#37474f"/>`;
+  },
+  spring() {
+    let out = "<g stroke='#222' stroke-width='2.5'>";
+    [[60, "#f06292"], [120, "#ba68c8"], [690, "#ffd54f"], [750, "#f06292"]].forEach(([x, color]) => {
+      out += `<line x1="${x}" y1="392" x2="${x}" y2="362" stroke="#388e3c" stroke-width="4"/>
+        ${[0, 72, 144, 216, 288].map(a =>
+          `<ellipse cx="${x}" cy="354" rx="6" ry="9" fill="${color}" transform="rotate(${a} ${x} 362)"/>`).join("")}
+        <circle cx="${x}" cy="362" r="5" fill="#fff59d"/>`;
+    });
+    return out + "</g>";
+  },
+  summer() {
+    return `
+      <g stroke="#222" stroke-width="3">
+        <circle cx="744" cy="56" r="26" fill="#ffeb3b"/>
+        ${[0, 45, 90, 135, 180, 225, 270, 315].map(a =>
+          `<line x1="744" y1="18" x2="744" y2="8" stroke="#fbc02d" stroke-width="5" transform="rotate(${a} 744 56)"/>`).join("")}
+      </g>
+      <g stroke="#222" stroke-width="3">
+        <circle cx="62" cy="372" r="20" fill="#fff"/>
+        <path d="M 42 372 a 20 20 0 0 1 40 0 Z" fill="#ef5350"/>
+        <line x1="42" y1="372" x2="82" y2="372"/>
+      </g>`;
+  }
+};
+
 /* ---------- main panel renderer ---------- */
 
 function renderScene(scene, ctx) {
@@ -451,6 +501,7 @@ function renderScene(scene, ctx) {
     </defs>
     ${bg}
     <rect width="800" height="450" fill="url(#dots${uid})"/>
+    ${ctx.season && SEASONS_ART[ctx.season] ? SEASONS_ART[ctx.season]() : ""}
     ${props}
     ${cast}
     ${speechBubble(scene, ctx)}

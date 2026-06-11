@@ -4,58 +4,13 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>Select Your Destiny! — Waiting Room Adventures</title>
-<link rel="stylesheet" href="css/style.css">
+<link rel="stylesheet" href="/css/style.css">
 </head>
 <body>
 
-<button id="staffBtn" class="staffBtn" onclick="openSetup()" title="Staff settings">⚙️ Staff</button>
-
-<!-- ================= STAFF SETUP ================= -->
-<section id="view-setup" class="view">
-  <div class="card">
-    <h1 class="appTitle">⚙️ Practice Setup</h1>
-    <p class="subtitle">Done once by the office — this is how your practice, your office and you show up inside every adventure.</p>
-
-    <label class="field">Practice name *
-      <input id="setupPractice" type="text" placeholder="e.g. Sunshine Pediatrics">
-    </label>
-
-    <label class="field">Doctor's name *
-      <input id="setupDoctor" type="text" placeholder="e.g. Dr. Rivera">
-    </label>
-
-    <label class="field">Describe your office / waiting room
-      <textarea id="setupOffice" rows="3"
-        placeholder="One or two fun sentences — they appear in the opening of every story. e.g. 'The waiting room has a giant fish tank, a reading boat full of books, and a mural of hot-air balloons.'"></textarea>
-    </label>
-
-    <div class="setupSplit">
-      <div>
-        <label class="field">A short description of the doctor
-          <textarea id="setupDoctorDesc" rows="3"
-            placeholder="Used if there's no photo. e.g. 'tall, curly hair, always wearing dinosaur socks and a big smile.'"></textarea>
-        </label>
-      </div>
-      <div class="photoField">
-        <span class="fieldLabel">…or the doctor's photo</span>
-        <div id="setupDoctorPhotoPreview" class="photoPreview"><span>none yet</span></div>
-        <label class="smallBtn">📁 Upload photo
-          <input id="setupDoctorPhotoFile" type="file" accept="image/*" hidden>
-        </label>
-      </div>
-    </div>
-
-    <div class="photoField logoField">
-      <span class="fieldLabel">Practice logo (optional — appears on flags &amp; signs in the stories)</span>
-      <div id="setupLogoPreview" class="photoPreview"><span>none yet</span></div>
-      <label class="smallBtn">📁 Upload logo
-        <input id="setupLogoFile" type="file" accept="image/*" hidden>
-      </label>
-    </div>
-
-    <button class="bigBtn" onclick="saveSetup()">💾 Save &amp; open the adventure kiosk</button>
-  </div>
-</section>
+<div id="kioskError" class="kioskError" style="display:none">
+  😕 This kiosk link isn't set up yet. Ask the front desk to check the kiosk link in the practice dashboard.
+</div>
 
 <!-- ================= KID START ================= -->
 <section id="view-home" class="view">
@@ -128,8 +83,17 @@
       </div>
     </div>
 
-    <button id="portraitsGo" class="bigBtn" disabled onclick="beginStory()">⭐ We're ready — into the comic!</button>
+    <button id="portraitsGo" class="bigBtn" disabled onclick="fetchStoryAndBegin()">⭐ We're ready — into the comic!</button>
     <button class="linkBtn" onclick="renderHome(); show('view-home')">← Back</button>
+  </div>
+</section>
+
+<!-- ================= STORY LOADING ================= -->
+<section id="view-loading" class="view">
+  <div class="card loadingCard">
+    <div class="loadingSpinner">✨</div>
+    <h1 class="appTitle">The Story Machine is writing…</h1>
+    <p class="subtitle">A brand-new adventure, made just for you. One moment!</p>
   </div>
 </section>
 
@@ -138,7 +102,11 @@
   <div class="storyWrap">
     <div class="storyHeader">
       <span id="storyTheme"></span>
-      <span id="storyPanelNum"></span>
+      <span class="storyHeaderRight">
+        <button id="ttsToggle" class="ttsBtn" onclick="tts.toggle()">🔊 Read aloud: ON</button>
+        <button class="ttsBtn" onclick="speakCurrentPanel()" title="Read this page again">🔁</button>
+        <span id="storyPanelNum"></span>
+      </span>
     </div>
     <div id="storyPanel" class="panelFrame"></div>
     <p id="storyCaption" class="caption"></p>
@@ -188,8 +156,8 @@
 <!-- ================= PRINT AREA ================= -->
 <div id="printArea" class="printArea"></div>
 
-<script src="js/stories.js"></script>
-<script src="js/scenes.js"></script>
-<script src="js/app.js"></script>
+<script src="/js/stories.js"></script>
+<script src="/js/scenes.js"></script>
+<script src="/js/app.js"></script>
 </body>
 </html>

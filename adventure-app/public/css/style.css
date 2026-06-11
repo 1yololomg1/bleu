@@ -267,3 +267,85 @@ body {
     text-align: center; margin-top: 26px; font-size: 0.9rem; color: #555;
   }
 }
+
+/* ============================================================
+   Kiosk additions: error banner, story loading, read-aloud
+   ============================================================ */
+
+.kioskError {
+  max-width: 700px; margin: 60px auto; padding: 24px 28px;
+  background: #fff; border: 5px solid var(--ink); border-radius: 18px;
+  font-size: 1.2rem; text-align: center; box-shadow: 8px 8px 0 #00000033;
+}
+
+.loadingCard { text-align: center; padding: 60px 30px; }
+.loadingSpinner {
+  font-size: 4rem; display: inline-block;
+  animation: sparkle 1.2s ease-in-out infinite;
+}
+@keyframes sparkle {
+  0%, 100% { transform: scale(1) rotate(0deg); }
+  50% { transform: scale(1.4) rotate(20deg); }
+}
+
+.storyHeaderRight { display: flex; gap: 8px; align-items: center; }
+.ttsBtn {
+  font-family: inherit; font-size: 0.85rem; font-weight: bold;
+  background: #fff; border: 3px solid var(--ink); border-radius: 10px;
+  padding: 5px 10px; cursor: pointer;
+}
+.ttsBtn.ttsOff { opacity: 0.55; }
+
+/* ============================================================
+   Dashboard
+   ============================================================ */
+
+.dashBody { background: #b3e5fc; background-image: radial-gradient(#00000010 2px, transparent 2px); background-size: 22px 22px; }
+.dashCard { max-width: 980px; }
+.dashHeader { display: flex; justify-content: space-between; align-items: center; gap: 12px; }
+
+.authTabs { display: flex; gap: 10px; justify-content: center; margin-bottom: 18px; }
+.authTab {
+  font-family: inherit; font-size: 1.05rem; font-weight: bold;
+  background: #fff; border: 3px solid var(--ink); border-radius: 12px;
+  padding: 8px 22px; cursor: pointer;
+}
+.authTab.picked { background: var(--sun); }
+
+.formError { color: #c62828; font-weight: bold; min-height: 1.2em; margin: 8px 0 0; }
+.saveOk { color: #2e7d32; font-weight: bold; min-height: 1.2em; margin: 8px 0 0; }
+
+.kioskLinkBox {
+  border: 4px dashed var(--sky); border-radius: 14px; background: #e3f2fd;
+  padding: 14px 18px; margin: 14px 0 6px;
+}
+.kioskLinkRow { display: flex; gap: 10px; align-items: center; flex-wrap: wrap; margin: 8px 0; }
+.kioskLinkRow code {
+  background: #fff; border: 2px solid var(--ink); border-radius: 8px;
+  padding: 6px 10px; font-size: 0.95rem;
+}
+.kioskLinkRow a.smallBtn { text-decoration: none; color: inherit; }
+.aiBadge { margin-top: 10px; font-size: 0.9rem; font-weight: bold; }
+
+.statRow { display: grid; grid-template-columns: repeat(auto-fit, minmax(150px, 1fr)); gap: 12px; }
+.statCard {
+  background: #fff; border: 4px solid var(--ink); border-radius: 14px;
+  padding: 14px; text-align: center; font-size: 0.85rem;
+  box-shadow: 4px 4px 0 #00000022;
+}
+.statCard span { display: block; font-size: 1.9rem; font-weight: bold; color: var(--pop); }
+
+.recentBox { margin-top: 12px; }
+.recentBox summary { cursor: pointer; font-weight: bold; }
+.dashTable { width: 100%; border-collapse: collapse; margin-top: 10px; background: #fff; }
+.dashTable th, .dashTable td {
+  border: 2px solid var(--ink); padding: 6px 10px; font-size: 0.9rem; text-align: left;
+}
+.dashTable th { background: var(--sun); }
+
+.field select {
+  display: block; width: 100%; margin-top: 6px;
+  font-family: inherit; font-size: 1.05rem;
+  border: 3px solid var(--ink); border-radius: 10px;
+  padding: 10px 12px; background: #fff;
+}

@@ -1,0 +1,14 @@
+{
+  "name": "select-your-destiny",
+  "version": "2.0.0",
+  "private": true,
+  "description": "Choose-your-own-adventure comic webapp for pediatric waiting rooms",
+  "main": "server.js",
+  "scripts": {
+    "start": "node server.js"
+  },
+  "engines": { "node": ">=22.5" },
+  "dependencies": {
+    "@anthropic-ai/sdk": "^0.74.0"
+  }
+}
