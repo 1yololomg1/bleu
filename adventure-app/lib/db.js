@@ -52,4 +52,7 @@ db.exec(`
   );
 `);
 
+// migrations for databases created before these columns existed
+try { db.exec("ALTER TABLE practices ADD COLUMN staff_pin_hash TEXT NOT NULL DEFAULT ''"); } catch { /* exists */ }
+
 module.exports = db;

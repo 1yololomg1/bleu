@@ -89,6 +89,22 @@ adventure-app/
         └── app.js       # kiosk flow, TTS, portraits, print
 ```
 
+### 5. Child safety — the kiosk is a sealed box
+- **Zero links off the page.** The kiosk has no navigation anywhere; the dashboard
+  is a separate login-only URL the kiosk never references.
+- **Staff PIN** (set in the dashboard) locks the front-desk
+  "$10 collected — Print" button behind a keypad. The server re-verifies the PIN
+  before recording the print, and locks out for 60s after 5 wrong tries (even
+  for the correct PIN). Until a PIN is set, the button requires a deliberate
+  3-second press-and-hold and the dashboard nags to set one.
+- **Lockdown mode** on the kiosk page: auto fullscreen (re-entered on the next
+  tap if escaped), no right-click/long-press menu, no text selection or drag,
+  no pinch-zoom or pull-to-refresh, and a confirm dialog if something tries to
+  leave the page mid-adventure.
+- **Device-level pinning** completes the lock (a browser can't fully imprison
+  itself): iPad Guided Access, Android app pinning / Fully Kiosk, or
+  `chrome --kiosk <link>`. Instructions are shown in the dashboard.
+
 ## Production notes
 - Serve over **HTTPS** (required for the kiosk camera; use any reverse proxy).
 - Portraits taken at the kiosk stay **in the browser for that session only** —

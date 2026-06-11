@@ -349,3 +349,46 @@ body {
   border: 3px solid var(--ink); border-radius: 10px;
   padding: 10px 12px; background: #fff;
 }
+
+/* ============================================================
+   Kiosk lockdown + staff PIN gate (child safety)
+   ============================================================ */
+
+.kioskLocked {
+  user-select: none;
+  -webkit-user-select: none;
+  -webkit-touch-callout: none;
+  touch-action: manipulation;
+  overscroll-behavior: none;
+}
+.kioskLocked input, .kioskLocked textarea { user-select: text; -webkit-user-select: text; }
+
+.pinCard { max-width: 340px; text-align: center; }
+.pinDots {
+  font-size: 1.8rem; letter-spacing: 8px; min-height: 1.4em;
+  background: #fff; border: 3px solid var(--ink); border-radius: 12px;
+  padding: 8px; margin: 10px 0 14px;
+}
+.pinPad { display: grid; grid-template-columns: repeat(3, 1fr); gap: 10px; }
+.pinKey {
+  font-family: inherit; font-size: 1.5rem; font-weight: bold;
+  background: #fff; border: 3px solid var(--ink); border-radius: 12px;
+  padding: 14px 0; cursor: pointer; box-shadow: 3px 3px 0 #00000022;
+}
+.pinKey:active { transform: translate(2px, 2px); box-shadow: none; }
+.pinOk { background: #66bb6a; color: #fff; }
+.pinAux { background: #eee; }
+
+/* hold-to-print progress (no-PIN fallback) */
+#printBtn { position: relative; overflow: hidden; }
+#printBtn.holding::after {
+  content: ""; position: absolute; inset: 0 100% 0 0;
+  background: #00000033;
+  animation: holdfill 3s linear forwards;
+}
+@keyframes holdfill { to { inset: 0 0 0 0; } }
+
+.safetyBox { border-color: var(--pop); background: #fff3e0; }
+.safetyTips { margin: 10px 0 0; padding-left: 20px; font-size: 0.85rem; }
+.safetyTips li { margin: 4px 0; }
+.safetyTips code { background: #fff; border: 1px solid #ccc; border-radius: 4px; padding: 1px 5px; }

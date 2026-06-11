@@ -2,7 +2,7 @@
 <html lang="en">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
 <title>Select Your Destiny! — Waiting Room Adventures</title>
 <link rel="stylesheet" href="/css/style.css">
 </head>
@@ -127,8 +127,11 @@
       <p>Show this screen at the front desk on your way out and pay <strong>$10</strong> —
          then your whole comic gets printed for you to take home!</p>
       <div class="deskOnly">
-        <span>Front desk only:</span>
-        <button class="bigBtn" onclick="frontDeskPrint()">💵 $10 collected — Print adventure</button>
+        <span id="deskHint">Front desk only:</span>
+        <button id="printBtn" class="bigBtn" onclick="frontDeskPrint()"
+                onpointerdown="holdStart(this)" onpointerup="holdEnd(this)"
+                onpointerleave="holdEnd(this)" onpointercancel="holdEnd(this)">
+          💵 $10 collected — Print adventure</button>
       </div>
     </div>
 
@@ -150,6 +153,31 @@
       <button class="bigBtn" onclick="snapPhoto()">📸 Snap!</button>
       <button class="smallBtn" onclick="closeCamera()">Cancel</button>
     </div>
+  </div>
+</div>
+
+<!-- ================= STAFF PIN MODAL ================= -->
+<div id="pinModal" class="modal">
+  <div class="modalCard pinCard">
+    <h2>🔒 Front desk only</h2>
+    <p>Enter the staff PIN to collect $10 and print.</p>
+    <div id="pinDots" class="pinDots">– – – –</div>
+    <div class="pinPad">
+      <button class="pinKey" onclick="pinKey('1')">1</button>
+      <button class="pinKey" onclick="pinKey('2')">2</button>
+      <button class="pinKey" onclick="pinKey('3')">3</button>
+      <button class="pinKey" onclick="pinKey('4')">4</button>
+      <button class="pinKey" onclick="pinKey('5')">5</button>
+      <button class="pinKey" onclick="pinKey('6')">6</button>
+      <button class="pinKey" onclick="pinKey('7')">7</button>
+      <button class="pinKey" onclick="pinKey('8')">8</button>
+      <button class="pinKey" onclick="pinKey('9')">9</button>
+      <button class="pinKey pinAux" onclick="pinBack()">⌫</button>
+      <button class="pinKey" onclick="pinKey('0')">0</button>
+      <button class="pinKey pinOk" onclick="pinSubmit()">✔</button>
+    </div>
+    <p id="pinError" class="formError"></p>
+    <button class="linkBtn" onclick="pinCancel()">Cancel</button>
   </div>
 </div>
 

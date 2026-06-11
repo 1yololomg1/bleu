@@ -86,8 +86,26 @@ function publicConfig(p) {
     practice: p.name, doctorName: p.doctor_name,
     officeDesc: p.office_desc, doctorDesc: p.doctor_desc,
     doctorPhoto: p.doctor_photo, logo: p.logo, season: p.season,
-    aiStories: !!process.env.ANTHROPIC_API_KEY
+    aiStories: !!process.env.ANTHROPIC_API_KEY,
+    hasPin: !!p.staff_pin_hash
   };
+}
+
+/* staff-PIN brute-force guard: 5 wrong tries → 60s lockout per practice */
+const pinAttempts = new Map(); // practiceId -> { fails, lockUntil }
+
+function checkPin(p, pin) {
+  if (!p.staff_pin_hash) return { ok: true };
+  const entry = pinAttempts.get(p.id) || { fails: 0, lockUntil: 0 };
+  if (Date.now() < entry.lockUntil) return { ok: false, locked: true };
+  if (pin && auth.verifyPassword(String(pin), p.staff_pin_hash)) {
+    pinAttempts.delete(p.id);
+    return { ok: true };
+  }
+  entry.fails++;
+  if (entry.fails >= 5) { entry.fails = 0; entry.lockUntil = Date.now() + 60_000; }
+  pinAttempts.set(p.id, entry);
+  return { ok: false, locked: Date.now() < entry.lockUntil };
 }
 
 const SETTABLE = ["name", "doctor_name", "office_desc", "doctor_desc", "doctor_photo", "logo", "season"];
@@ -148,6 +166,7 @@ const routes = {
     if (!p) return json(res, 401, { error: "Not logged in." });
     json(res, 200, {
       email: p.email, kioskCode: p.kiosk_code, isAdmin: !!ADMIN_EMAIL && p.email === ADMIN_EMAIL,
+      hasPin: !!p.staff_pin_hash,
       settings: {
         name: p.name, doctor_name: p.doctor_name, office_desc: p.office_desc,
         doctor_desc: p.doctor_desc, doctor_photo: p.doctor_photo, logo: p.logo, season: p.season
@@ -163,6 +182,12 @@ const routes = {
     if (body.season && !SEASONS.includes(body.season)) return json(res, 400, { error: "Bad season." });
     if (body.name !== undefined && !String(body.name).trim()) return json(res, 400, { error: "Practice name required." });
     if (body.doctor_name !== undefined && !String(body.doctor_name).trim()) return json(res, 400, { error: "Doctor name required." });
+    if (body.removePin) {
+      db.prepare("UPDATE practices SET staff_pin_hash = '' WHERE id = ?").run(p.id);
+    } else if (body.staffPin) {
+      if (!/^\d{4,8}$/.test(String(body.staffPin))) return json(res, 400, { error: "Staff PIN must be 4–8 digits." });
+      db.prepare("UPDATE practices SET staff_pin_hash = ? WHERE id = ?").run(auth.hashPassword(String(body.staffPin)), p.id);
+    }
     for (const field of SETTABLE) {
       if (body[field] !== undefined) {
         db.prepare(`UPDATE practices SET ${field} = ? WHERE id = ?`).run(String(body[field]), p.id);
@@ -218,7 +243,14 @@ async function kioskRoute(req, res, code, action, body) {
     return json(res, 200, { ok: true });
   }
 
+  if (req.method === "POST" && action === "pin") {
+    const result = checkPin(p, body.pin);
+    return json(res, result.ok ? 200 : 403, result);
+  }
+
   if (req.method === "POST" && action === "print") {
+    const result = checkPin(p, body.pin); // staff-only: kids can't trigger the $10 print
+    if (!result.ok) return json(res, 403, result);
     db.prepare("INSERT INTO prints (practice_id, theme, panels, amount_cents) VALUES (?, ?, ?, 1000)")
       .run(p.id, String(body.theme || "").slice(0, 40), Number(body.panels) || 0);
     return json(res, 200, { ok: true });

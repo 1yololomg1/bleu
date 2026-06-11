@@ -125,6 +125,29 @@
       </div>
     </div>
 
+    <h2 class="sectionTitle">🔒 Kiosk child-safety</h2>
+    <div class="kioskLinkBox safetyBox">
+      <p id="pinStatus"></p>
+      <div class="setupSplit">
+        <label class="field">Set / change staff PIN (4–8 digits)
+          <input id="setPin" type="password" inputmode="numeric" autocomplete="new-pin"
+                 maxlength="8" placeholder="e.g. 2468 — leave blank to keep current">
+        </label>
+        <div>
+          <span class="fieldLabel">&nbsp;</span>
+          <button class="smallBtn" onclick="removePin()">Remove PIN</button>
+        </div>
+      </div>
+      <small>The PIN locks the front-desk <strong>"$10 collected — Print"</strong> button so kids can't
+        press it. The kiosk itself has no links anywhere else — but to fully lock the tablet,
+        also pin the browser at the device level:</small>
+      <ul class="safetyTips">
+        <li><strong>iPad:</strong> Settings → Accessibility → <em>Guided Access</em> (triple-click to lock to Safari)</li>
+        <li><strong>Android:</strong> Settings → Security → <em>App pinning</em>, or a kiosk app like Fully Kiosk</li>
+        <li><strong>Windows/Chromebook:</strong> launch Chrome with <code>--kiosk &lt;your kiosk link&gt;</code></li>
+      </ul>
+    </div>
+
     <p id="saveError" class="formError"></p>
     <button class="bigBtn" onclick="saveSettings()">💾 Save settings</button>
     <p id="saveOk" class="saveOk"></p>
@@ -252,6 +275,7 @@ async function loadDashboard() {
   $("setOffice").value = s.office_desc;
   $("setDoctorDesc").value = s.doctor_desc;
   $("setSeason").value = s.season || "none";
+  updatePinStatus(me.hasPin);
   setPreview("setDoctorPhotoPreview", s.doctor_photo);
   setPreview("setLogoPreview", s.logo);
 
@@ -265,20 +289,41 @@ async function loadDashboard() {
   showView("view-dash");
 }
 
+function updatePinStatus(hasPin) {
+  $("pinStatus").innerHTML = hasPin
+    ? "Staff PIN: <strong>set ✅</strong> — the print button asks for it."
+    : "Staff PIN: <strong>not set ⚠️</strong> — kids could press the $10 print button. Set one below!";
+}
+
+async function removePin() {
+  try {
+    await api("PUT", "/api/practice", { removePin: true });
+    updatePinStatus(false);
+    $("saveOk").textContent = "✅ Staff PIN removed.";
+  } catch (e) { $("saveError").textContent = e.message; }
+}
+
 async function saveSettings() {
   $("saveError").textContent = ""; $("saveOk").textContent = "";
+  const body = {
+    name: $("setName").value.trim(),
+    doctor_name: $("setDoctor").value.trim(),
+    office_desc: $("setOffice").value.trim(),
+    doctor_desc: $("setDoctorDesc").value.trim(),
+    doctor_photo: $("setDoctorPhotoPreview").dataset.value || "",
+    logo: $("setLogoPreview").dataset.value || "",
+    season: $("setSeason").value
+  };
+  const pin = $("setPin").value.trim();
+  if (pin) {
+    if (!/^\d{4,8}$/.test(pin)) { $("saveError").textContent = "Staff PIN must be 4–8 digits."; return; }
+    body.staffPin = pin;
+  }
   try {
-    await api("PUT", "/api/practice", {
-      name: $("setName").value.trim(),
-      doctor_name: $("setDoctor").value.trim(),
-      office_desc: $("setOffice").value.trim(),
-      doctor_desc: $("setDoctorDesc").value.trim(),
-      doctor_photo: $("setDoctorPhotoPreview").dataset.value || "",
-      logo: $("setLogoPreview").dataset.value || "",
-      season: $("setSeason").value
-    });
+    await api("PUT", "/api/practice", body);
     $("saveOk").textContent = "✅ Saved — the kiosk is already using the new settings.";
     $("dashPractice").textContent = $("setName").value.trim();
+    if (pin) { $("setPin").value = ""; updatePinStatus(true); }
   } catch (e) { $("saveError").textContent = e.message; }
 }
 

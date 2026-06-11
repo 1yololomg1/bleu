@@ -54,6 +54,38 @@ function sceneCtx() {
   };
 }
 
+/* ---------- kiosk lockdown (child safety) ----------
+   The kiosk page has zero links off itself; this hardens the rest:
+   fullscreen, no context menu / selection / drag / zoom / pull-to-refresh,
+   and a leave-page guard mid-adventure. Pair with OS-level kiosk pinning
+   (iPad Guided Access / Android app pinning / chrome --kiosk) for a full lock. */
+
+const kioskLock = {
+  init() {
+    document.body.classList.add("kioskLocked");
+    for (const ev of ["contextmenu", "dragstart", "selectstart"]) {
+      document.addEventListener(ev, e => {
+        if (!e.target.closest("input, textarea")) e.preventDefault();
+      });
+    }
+    // block pinch zoom on iOS Safari (gesture events are non-standard but real there)
+    for (const ev of ["gesturestart", "gesturechange"]) {
+      document.addEventListener(ev, e => e.preventDefault());
+    }
+    window.addEventListener("beforeunload", e => {
+      if (session) { e.preventDefault(); e.returnValue = ""; }
+    });
+    // any tap re-enters fullscreen if a kid found the Escape key
+    document.addEventListener("click", () => this.ensureFullscreen(), true);
+  },
+  ensureFullscreen() {
+    const el = document.documentElement;
+    if (!document.fullscreenElement && el.requestFullscreen) {
+      el.requestFullscreen().catch(() => {});
+    }
+  }
+};
+
 /* ---------- read-aloud (Web Speech API) ---------- */
 
 const tts = {
@@ -354,6 +386,9 @@ function finishStory(endNode) {
   const isStar = session.tier === "star";
   document.getElementById("endStar").style.display = isStar ? "" : "none";
   document.getElementById("endClassic").style.display = isStar ? "none" : "";
+  document.getElementById("deskHint").textContent = config.hasPin
+    ? "Front desk only — staff PIN required:"
+    : "Front desk only — press and HOLD for 3 seconds (tip: set a staff PIN in the dashboard):";
   show("view-ending");
 
   fetch(`/api/kiosk/${KIOSK_CODE}/play`, {
@@ -363,13 +398,83 @@ function finishStory(endNode) {
   }).catch(() => {});
 }
 
-async function frontDeskPrint() {
+/* ---------- staff gate for the $10 print button ----------
+   With a staff PIN set (dashboard), a keypad guards the button and the
+   server re-verifies the PIN before recording the print. Without a PIN,
+   the button requires a deliberate 3-second press-and-hold. */
+
+let pinBuffer = "";
+let holdTimer = null;
+
+function frontDeskPrint() {
+  if (config.hasPin) {
+    pinBuffer = "";
+    document.getElementById("pinError").textContent = "";
+    renderPinDots();
+    document.getElementById("pinModal").classList.add("open");
+  }
+  // no PIN: handled by press-and-hold on the button (see holdStart/holdEnd)
+}
+
+function holdStart(btn) {
+  if (config.hasPin) return; // click flow opens the keypad instead
+  btn.classList.add("holding");
+  holdTimer = setTimeout(() => {
+    btn.classList.remove("holding");
+    holdTimer = null;
+    doPrint("");
+  }, 3000);
+}
+
+function holdEnd(btn) {
+  btn.classList.remove("holding");
+  if (holdTimer) { clearTimeout(holdTimer); holdTimer = null; }
+}
+
+function pinKey(d) {
+  if (pinBuffer.length < 8) pinBuffer += d;
+  renderPinDots();
+}
+function pinBack() { pinBuffer = pinBuffer.slice(0, -1); renderPinDots(); }
+function pinCancel() { document.getElementById("pinModal").classList.remove("open"); }
+
+function renderPinDots() {
+  document.getElementById("pinDots").textContent =
+    pinBuffer.length ? "●".repeat(pinBuffer.length) : "– – – –";
+}
+
+async function pinSubmit() {
+  const err = document.getElementById("pinError");
+  err.textContent = "";
+  if (pinBuffer.length < 4) { err.textContent = "PIN is at least 4 digits."; return; }
   try {
-    await fetch(`/api/kiosk/${KIOSK_CODE}/print`, {
+    const resp = await fetch(`/api/kiosk/${KIOSK_CODE}/pin`, {
       method: "POST",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ theme: session.themeId, panels: session.path.length })
+      body: JSON.stringify({ pin: pinBuffer })
     });
+    const data = await resp.json();
+    if (!data.ok) {
+      err.textContent = data.locked
+        ? "Too many tries — locked for a minute."
+        : "Wrong PIN — try again.";
+      pinBuffer = ""; renderPinDots();
+      return;
+    }
+  } catch (e) { err.textContent = "Couldn't reach the server."; return; }
+  const pin = pinBuffer;
+  pinCancel();
+  doPrint(pin);
+}
+
+async function doPrint(pin) {
+  try {
+    const resp = await fetch(`/api/kiosk/${KIOSK_CODE}/print`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ theme: session.themeId, panels: session.path.length, pin })
+    });
+    if (!resp.ok) return; // PIN re-check failed server-side — no print
   } catch (e) { /* printing still proceeds; counts can be reconciled later */ }
   buildPrintout();
   window.print();
@@ -430,6 +535,7 @@ function newAdventure() {
 /* ---------- boot ---------- */
 
 window.addEventListener("DOMContentLoaded", async () => {
+  kioskLock.init();
   updateTtsButtons();
   if (!KIOSK_CODE) {
     document.getElementById("kioskError").style.display = "";
